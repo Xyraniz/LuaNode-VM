@@ -29,7 +29,7 @@ module.exports.to_uristring      = core.to_uristring;
 const luaconf = require('./luaconf.js');
 const lua     = require('./lua.js');
 const lauxlib = require('./lauxlib.js');
-const lualib  = require('./lualib.js');
+const lualib  = require('./stdlib/lualib.js');
 
 module.exports.luaconf = luaconf;
 module.exports.lua     = lua;
