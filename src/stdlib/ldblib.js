@@ -72,7 +72,7 @@ const {
     lua_upvalueid,
     lua_upvaluejoin,
     lua_xmove
-} = require('./lua.js');
+} = require('../lua.js');
 const {
     luaL_argcheck,
     luaL_argerror,
@@ -87,12 +87,12 @@ const {
     luaL_optstring,
     luaL_traceback,
     lua_writestringerror
-} = require('./lauxlib.js');
+} = require('../lauxlib.js');
 const lualib = require('./lualib.js');
 const {
     luastring_indexOf,
     to_luastring
-} = require("./fengaricore.js");
+} = require("../fengaricore.js");
 
 /*
 ** If L1 != L, L1 can be in any state, and therefore there are no
