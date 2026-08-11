@@ -1,6 +1,7 @@
 "use strict";
 
 const { LUA_MAXINTEGER } = require('../luaconf.js');
+const I64 = require('../lint64.js');
 const {
     LUA_OPEQ,
     LUA_OPLT,
@@ -150,14 +151,14 @@ const tmove = function(L) {
     checktab(L, 1, TAB_R);
     checktab(L, tt, TAB_W);
     if (e >= f) {  /* otherwise, nothing to move */
-        luaL_argcheck(L, f > 0 || e < LUA_MAXINTEGER + f, 3, "too many elements to move");
-        let n = e - f + 1;  /* number of elements to move */
-        luaL_argcheck(L, t <= LUA_MAXINTEGER - n + 1, 4, "destination wrap around");
+        luaL_argcheck(L, I64.lt(0, f) || I64.lt(e, I64.add(LUA_MAXINTEGER, f)), 3, "too many elements to move");
+        let n = I64.sub(I64.add(e, 1), f);  /* number of elements to move */
+        luaL_argcheck(L, I64.le(t, I64.add(I64.sub(LUA_MAXINTEGER, n), 1)), 4, "destination wrap around");
 
         if (t > e || t <= f || (tt !== 1 && lua_compare(L, 1, tt, LUA_OPEQ) !== 1)) {
             for (let i = 0; i < n; i++) {
-                lua_geti(L, 1, f + i);
-                lua_seti(L, tt, t + i);
+                lua_geti(L, 1, I64.add(f, i));
+                lua_seti(L, tt, I64.add(t, i));
             }
         } else {
             for (let i = n - 1; i >= 0; i--) {

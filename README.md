@@ -2,81 +2,248 @@
 <img src="logo.png" alt="LuaNode VM Logo" width="160" />
 </p>
 
-# LuaNode VM (`luanode-vm`)
+# LuaNode-VM
 
-> **An enhanced, modern JavaScript runtime and Virtual Machine for Lua 5.3, built as a specialized fork of Fengari with robust 64-bit integer support and active compatibility improvements for Node.js and web browsers.**
+> **A Lua 5.3 Virtual Machine implemented in modern JavaScript, featuring true 64-bit integer arithmetic via BigInt — something the original Fengari never achieved.**
 
 ## Overview
 
-`LuaNode VM` is an open-source JavaScript execution environment for Lua bytecode and source scripts, derived and improved from the foundational architecture of **Fengari**. While Fengari achieved an impressive transpilación of Lua to ES6, its historical design limited integer widths to 32 bits and left certain modern runtime adjustments pending.
+LuaNode-VM is a JavaScript implementation of the Lua 5.3 virtual machine, originally derived from [Fengari](https://github.com/fengari-lua/fengari) and substantially overhauled to fix a critical correctness flaw: **Fengari used JavaScript `Number` (IEEE-754 double) to represent Lua's `lua_Integer`, which limited integers to the 53-bit safe-integer range (±9,007,199,254,740,991).** This meant that `math.maxinteger` reported `9007199254740991` instead of the correct `9223372036854775807`, integer overflow wraparound was silently broken, and any literal above 2^53 lost precision.
 
-`LuaNode VM` builds upon this solid foundation by introducing native 64-bit safe integer arithmetic (`Number.MAX_SAFE_INTEGER`), widening bytecode serialization structures, and maintaining active compatibility updates for contemporary Node.js and browser environments. It bridges the gap between high-level scripting languages and modern JavaScript runtimes with improved precision and active maintenance.
+LuaNode-VM solves this with a **hybrid Number/BigInt representation**: values within the safe-integer range use plain `Number` for speed, while values outside that range — up to the full signed 64-bit span — use `BigInt`. All arithmetic, bitwise, comparison, parsing, formatting, bytecode serialization, and table operations have been rewritten to respect true int64 semantics with two's-complement wraparound modulo 2^64, exactly matching PUC-Rio Lua 5.3.
+
+### What Was Wrong in Fengari (and Is Fixed Here)
+
+| Issue | Fengari (original) | LuaNode-VM |
+|-------|-------------------|------------|
+| `math.maxinteger` | `9007199254740991` (2^53−1) | `9223372036854775807` (2^63−1) ✓ |
+| `math.mininteger` | `-9007199254740991` | `-9223372036854775808` ✓ |
+| `math.maxinteger + 1` | `9007199254740992` (wrong, no wrap) | `-9223372036854775808` (correct wraparound) ✓ |
+| Literal `9223372036854775807` | Loses precision (becomes float) | Exact integer ✓ |
+| Literal `9007199254740993` | Rounded to `...992` | Exact: `9007199254740993` ✓ |
+| Integer overflow wraparound | Broken (float semantics) | Two's-complement mod 2^64 ✓ |
+| `string.format("%d", big_int)` | Wrong / truncated | Full 64-bit precision ✓ |
+| `string.pack`/`unpack` with `i8` | 32-bit truncation | Full 64-bit ✓ |
+| Bytecode dump/load of large ints | Precision loss | Exact 8-byte LE round-trip ✓ |
+| Table keys above 2^53 | Collision (Number coercion) | Distinct keys via BigInt ✓ |
 
 ---
 
-## Key Enhancements & Features
+## Key Features
 
-- **True 64-Bit Integer Support (****`lua_Integer`****)**: Unlike the 32-bit limitation in baseline Fengari, LuaNode-VM upgrades integer handling to utilize the full 53-bit safe integer range of JavaScript (`±9,007,992,547,409,91`), ensuring full compliance with Lua 5.3 expectations for `math.maxinteger` and large numerical operations.
+- **True 64-bit `lua_Integer` via BigInt**: Hybrid Number/BigInt representation with automatic shrinking back to `Number` when values re-enter the safe range. Full int64 range [-2^63, 2^63-1] with correct two's-complement overflow wraparound.
 
-- **Upgraded Bytecode Serialization**: Modifies `ldump.js` and `lundump.js` to serialize and deserialize 64-bit integers across 8-byte boundaries using combined 32-bit high and low words.
+- **Complete arithmetic semantics**: Integer addition, subtraction, multiplication, negation, floor division (`//`), and modulo all respect 64-bit wraparound. The `MIN_INT64 / -1` overflow case correctly raises an error, matching PUC-Rio Lua.
 
-- **Active Maintenance & Modern Tooling**: Regularly updated dependency graphs, modern ESLint configurations, and active refactoring tailored for current Node.js runtimes.
+- **64-bit bitwise operations**: `&`, `|`, `~` (xor), `~` (bnot), `<<`, `>>`, and `~>` (unsigned right shift) all operate on the full 64-bit width using `BigInt.asUintN(64, ...)` and `BigInt.asIntN(64, ...)` masking.
 
-- **Universal Cross-Environment Execution**: Operates natively in both modern Node.js environments and standard web browsers with identical API structures and execution semantics.
+- **Accurate string formatting**: `string.format` with `%d`, `%i`, `%u`, `%o`, `%x`, `%X` handles BigInt values with correct flags (`-+ 0#`), width, and precision. The `%q` literal formatter prints `math.mininteger` in hex form (`0x8000000000000000`), matching PUC-Rio Lua exactly. Float formatting uses `%.14g` with proper scientific notation, and `%e`/`%E` exponents use minimum two digits.
 
-- **Familiar C-Compatible JS API**: Preserves the intuitive JavaScript API mirroring traditional C-API conventions (`lua_State`, stack manipulation, and library loading) established by Fengari.
+- **Full bytecode serialization**: `string.dump`/`load` round-trips preserve full 64-bit integer constants via 8-byte little-endian encoding, verified with values like `9007199254740993` that would lose precision under the old approach.
+
+- **`string.pack`/`string.unpack` with 64-bit integers**: The `i8`/`I8`/`j`/`J` format options correctly pack and unpack full 64-bit integers using BigInt byte extraction, no 32-bit truncation.
+
+- **Table keys without collision**: Large integer table keys (above 2^53) are correctly stored and retrieved without Number/BigInt hash collisions, and `table.move` overflow checks use full 64-bit arithmetic.
+
+- **Cross-environment execution**: Runs natively in both Node.js and modern web browsers with identical API and semantics.
+
+- **Familiar C-API-compatible JavaScript API**: Preserves the intuitive JavaScript API mirroring the Lua C API (`lua_State`, stack manipulation, library loading) established by Fengari.
+
+- **CLI runner**: Execute `.lua` scripts directly from the command line with `node cli/luanode.js script.lua args...`.
+
+- **Comprehensive test suite**: 126+ Jest tests covering 64-bit integers, string formatting, table operations, coroutines, closures, metatables, and general Lua 5.3 regression.
+
+---
+
+## Installation
+
+```bash
+git clone https://github.com/Xyraniz/LuaNode-VM.git
+cd LuaNode-VM
+npm install
+```
+
+---
+
+## Quick Start
+
+### Running Lua Scripts from the Command Line
+
+```bash
+# Run a Lua script file
+node cli/luanode.js myscript.lua arg1 arg2
+
+# Execute a Lua expression
+node cli/luanode.js -e "print(math.maxinteger); print(math.maxinteger + 1)"
+
+# Show version
+node cli/luanode.js -v
+```
+
+### JavaScript API
+
+```javascript
+const F = require('./src/fengari.js');
+const { lua, lauxlib, lualib, to_luastring, to_jsstring } = F;
+
+// Create a Lua state and open standard libraries
+const L = lauxlib.luaL_newstate();
+lualib.luaL_openlibs(L);
+
+// Load and run a Lua string
+const code = `
+    print("math.maxinteger =", math.maxinteger)
+    print("math.mininteger =", math.mininteger)
+    print("overflow:", math.maxinteger + 1)
+    print("bitwise:", 0xFFFFFFFFFFFFFFFF & 0x0)
+`;
+
+if (lauxlib.luaL_loadstring(L, to_luastring(code)) === lua.LUA_OK) {
+    lua.lua_pcall(L, 0, 0, 0);
+}
+```
+
+### 64-bit Integer Demonstration
+
+```lua
+-- math.maxinteger is the REAL 2^63-1, not 2^53-1
+print(math.maxinteger)        --> 9223372036854775807
+print(math.mininteger)        --> -9223372036854775808
+
+-- Overflow wraps around (two's complement modulo 2^64)
+print(math.maxinteger + 1)    --> -9223372036854775808
+print(math.mininteger - 1)    --> 9223372036854775807
+
+-- Full 64-bit arithmetic
+print(9223372036854775807 * 2)  --> -2
+
+-- Large literals preserve precision
+print(9007199254740993)       --> 9007199254740993  (not rounded!)
+
+-- Integer floor division and modulo
+print(7 // 2)                 --> 3
+print(-7 // 2)               --> -4
+print(7 % 3)                 --> 1
+print(-7 % 3)               --> 2
+
+-- Bitwise on full 64-bit width
+print(0x7FFFFFFFFFFFFFFF & 0xFFFFFFFFFFFFFFFF)  --> 9223372036854775807
+
+-- string.format handles full 64-bit integers
+print(string.format("%d", 9223372036854775807))  --> 9223372036854775807
+print(string.format("%x", 0xFFFFFFFFFFFFFFFF))   --> ffffffffffffffff
+
+-- Table keys above 2^53 work correctly
+local t = {}
+t[9007199254740993] = "hello"
+print(t[9007199254740993])    --> hello
+```
+
+---
+
+## Testing
+
+LuaNode-VM includes a comprehensive Jest test suite (126+ tests) verifying:
+
+- **64-bit integer limits and literals** (`tests/int64.test.js`)
+- **Overflow wraparound semantics** (`tests/int64.test.js`)
+- **Arithmetic, division, modulo, and bitwise operations** (`tests/int64.test.js`)
+- **String formatting with large integers** (`tests/string-format.test.js`)
+- **Table operations with large integer keys** (`tests/table-keys.test.js`)
+- **Regression tests for general Lua 5.3 functionality** (`tests/regression.test.js`)
+
+```bash
+# Run all tests
+npm test
+
+# Run with coverage
+npm run test:coverage
+
+# Run a specific test file
+npx jest tests/int64.test.js
+```
+
+### Linting
+
+```bash
+npm run lint
+```
+
+---
+
+## How 64-bit Integer Support Works
+
+The core of LuaNode-VM's integer overhaul is `src/lint64.js`, a self-contained module providing hybrid Number/BigInt 64-bit integer arithmetic. The design principles are:
+
+1. **Fast path for safe integers**: Values within `Number.MIN_SAFE_INTEGER` to `Number.MAX_SAFE_INTEGER` (±2^53-1) are stored as plain JavaScript `Number`. This covers the vast majority of real-world integer usage and avoids BigInt overhead.
+
+2. **BigInt for the full int64 range**: Values outside the safe range — up to the full signed 64-bit span [-2^63, 2^63-1] — are stored as `BigInt`. The `shrink()` function converts BigInt back to Number when a value re-enters the safe range.
+
+3. **Two's-complement wraparound**: The `wrap()` function applies `BigInt.asIntN(64, ...)` to produce correct signed 64-bit overflow semantics. For example, `9223372036854775807 + 1` wraps to `-9223372036854775808`, exactly as in PUC-Rio Lua.
+
+4. **Bitwise operations on 64-bit width**: All bitwise ops use `BigInt.asUintN(64, ...)` for unsigned interpretation and `BigInt.asIntN(64, ...)` for signed results, ensuring correct behavior across the full int64 range.
+
+5. **Pervasive propagation**: The I64 module is used throughout the VM — in `lvm.js` (all opcodes), `lobject.js` (constant folding, string-to-integer parsing), `lstrlib.js` (string.format, string.pack/unpack), `ldump.js`/`lundump.js` (bytecode serialization), `ltable.js` (table key hashing), `ltablib.js` (table.move), `lmathlib.js` (math library), `lapi.js` (API functions), and `luaconf.js`/`llimits.js` (configuration constants).
 
 ---
 
 ## Architectural Origin & Transparency
 
-`LuaNode VM` is explicitly a **specialized fork of Fengari** (`fengari-lua/fengari`). We believe in radical transparency:
+LuaNode-VM is explicitly a **specialized fork of Fengari** (`fengari-lua/fengari`). We believe in radical transparency:
 
-- The core virtual machine architecture, lexical parser, and module organization (`fengaricore`, `lapi`, `lvm`, etc.) originate from the excellent work of the Fengari team.
+- The core virtual machine architecture, lexical parser, and module organization originate from the excellent work of the Fengari team.
 
-- LuaNode-VM focuses its independent development on numerical precision (64-bit integers), modern runtime compatibility, and continuous maintenance.
+- LuaNode-VM's independent development focuses on: (1) true 64-bit integer support via BigInt, (2) comprehensive correctness testing, (3) modern tooling (ESLint, CI, CLI), and (4) a truthful, accurate README.
 
----
-
-## Installation & Quick Start
-
-Clone the repository and install the necessary dependencies using your preferred package manager:
-
-```bash
-git clone https://github.com/Xyraniz/luanode-vm.git
-cd luanode-vm
-npm install
-```
-
-### Basic JavaScript Integration Example
-
-To initialize a Lua state, load standard libraries, and execute operations from JavaScript, use the following pattern:
-
-```javascript
-const luanode = require('./src/fengari.js' );
-
-const lauxlib = luanode.lauxlib;
-const lualib  = luanode.lualib;
-const lua     = luanode.lua;
-
-// Initialize a new execution state
-const L = lauxlib.luaL_newstate();
-
-// Load standard Lua libraries
-lualib.luaL_openlibs(L);
-
-// Push a value onto the virtual stack
-lua.lua_pushliteral(L, "Initialized LuaNode VM successfully.");
-```
+- We acknowledge that prior versions of this README made inaccurate claims about "64-bit integer support" that were, in reality, limited to JavaScript's 53-bit safe-integer range. This has been corrected — the claims in this README are verified by the test suite and can be independently confirmed by running the code.
 
 ---
 
-## Running the Test Suite
+## Continuous Integration
 
-`LuaNode VM` includes an extensive testing framework powered by Jest to guarantee execution stability and prevent regressions across updates:
+GitHub Actions CI runs on every push and pull request to `main`, testing across Node.js 18, 20, and 22:
 
-```bash
-npm test
+- ESLint (zero errors required)
+- Full Jest test suite (all tests must pass)
+- 64-bit integer verification against reference Lua 5.3
+
+See `.github/workflows/ci.yml` for details.
+
+---
+
+## Project Structure
+
+```
+LuaNode-VM/
+├── src/
+│   ├── lint64.js              # Core 64-bit integer module (hybrid Number/BigInt)
+│   ├── lvm.js                 # Virtual machine (opcodes use I64)
+│   ├── lobject.js             # Object model (intarith, l_str2int via BigInt)
+│   ├── lapi.js                # C API (accepts BigInt integers)
+│   ├── ltable.js              # Tables (BigInt key hashing, 64-bit conversions)
+│   ├── llex.js                # Lexer
+│   ├── lcode.js               # Code generator
+│   ├── ldump.js               # Bytecode serializer (8-byte LE integers)
+│   ├── lundump.js             # Bytecode deserializer (8-byte LE integers)
+│   ├── luaconf.js             # Configuration (true int64 limits, %.14g format)
+│   ├── llimits.js             # Limits (MAX_INT/MIN_INT = real int64)
+│   ├── fengari.js             # Main entry point
+│   └── stdlib/
+│       ├── lstrlib.js         # String library (formatInteger, pack/unpack 64-bit)
+│       ├── lmathlib.js        # Math library (abs, fmod, ult, random for 64-bit)
+│       ├── ltablib.js         # Table library (table.move with 64-bit checks)
+│       └── ...
+├── tests/
+│   ├── lua-helpers.js         # Test utility module
+│   ├── int64.test.js          # 64-bit integer tests
+│   ├── string-format.test.js  # string.format tests
+│   ├── table-keys.test.js     # Table key tests
+│   └── regression.test.js     # General Lua 5.3 regression tests
+├── cli/
+│   └── luanode.js             # CLI runner for .lua scripts
+├── .github/workflows/ci.yml   # CI configuration
+├── eslint.config.js           # ESLint flat config
+└── package.json
 ```
 
 ---
@@ -84,3 +251,5 @@ npm test
 ## License
 
 This project is open-source software licensed under the **MIT License**. See the [LICENSE](LICENSE) file for complete details.
+
+The original Fengari project is also MIT-licensed. We gratefully acknowledge the Fengari team for the foundational work upon which LuaNode-VM builds.

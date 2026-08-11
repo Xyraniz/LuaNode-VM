@@ -14,6 +14,7 @@ const {
     },
     luastring_of
 } = require('./defs.js');
+const I64 = require('./lint64.js');
 
 const LUAC_DATA    = luastring_of(25, 147, 13, 10, 26, 10);
 const LUAC_INT     = 0x5678;
@@ -49,21 +50,13 @@ const DumpInt = function(x, D) {
 };
 
 /*
-** DumpInteger serializes a Lua integer using 8 bytes (two little-endian
-** 32-bit halves: low then high). This widens the original 4-byte format
-** so that integers up to Number.MAX_SAFE_INTEGER (2^53-1) round-trip
-** exactly instead of being truncated to 32 bits. JavaScript Numbers can
-** represent every integer in [-2^53+1, 2^53-1] losslessly, so splitting
-** the value into low/high words via bitwise ops (which operate modulo
-** 2^32 on 32-bit signed ints) is sufficient for the supported range.
+** DumpInteger serializes a Lua integer (hybrid Number/BigInt) as 8
+** little-endian bytes in two's-complement int64 form. Using I64.toBytesLE
+** guarantees that the full int64 range — including BigInt values outside
+** the JS safe-integer range — round-trips losslessly.
 */
 const DumpInteger = function(x, D) {
-    let ab = new ArrayBuffer(8);
-    let dv = new DataView(ab);
-    dv.setInt32(0, x | 0, true);          /* low 32 bits (signed) */
-    dv.setInt32(4, Math.floor(x / 0x100000000), true); /* high word */
-    let t = new Uint8Array(ab);
-    DumpBlock(t, 8, D);
+    DumpBlock(I64.toBytesLE(x), 8, D);
 };
 
 const DumpNumber = function(x, D) {

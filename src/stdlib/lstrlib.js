@@ -1,6 +1,154 @@
 "use strict";
 
 const { sprintf } = require('sprintf-js');
+const I64 = require('../lint64.js');
+
+/*
+** sprintf-js produces single-digit exponents (e.g. "1.2e+3") whereas C
+** printf (and therefore PUC-Rio Lua 5.3) uses a minimum of two exponent
+** digits ("1.2e+03"). This helper post-processes the output of sprintf-js
+** for e/E/g/G conversions to match C's behaviour.
+*/
+const fixExponent = function(s) {
+    return s.replace(/([eE])([-+]?)(\d+)$/, function(m, e, sign, digits) {
+        if (digits.length < 2) digits = "0" + digits;
+        if (!sign) sign = "+";
+        return e + sign + digits;
+    });
+};
+
+/*
+** Format a (possibly BigInt) lua_Integer according to a printf-style
+** integer conversion. sprintf-js cannot handle BigInt, so we implement
+** the integer specifiers (d, i, u, o, x, X) ourselves, supporting the
+** flags '-', '+', ' ', '0', '#', an optional width and precision.
+**
+** `form` is an array of byte codes beginning with '%' and ending with
+** the conversion specifier. `n` is the hybrid int value (Number or BigInt).
+*/
+const formatInteger = function(form, n) {
+    /* Parse the format string: %[flags][width][.precision]specifier */
+    let s = String.fromCharCode(...form);
+    let spec = s[s.length - 1];
+    let body = s.slice(1, -1);  /* everything between % and specifier */
+
+    let leftAlign = false, plusSign = false, spaceSign = false,
+        zeroPad = false, altForm = false;
+    let width = 0, precision = -1;
+    let i = 0;
+
+    /* flags */
+    while (i < body.length && "-+ 0#".indexOf(body[i]) >= 0) {
+        switch (body[i]) {
+            case '-': leftAlign = true; break;
+            case '+': plusSign = true; break;
+            case ' ': spaceSign = true; break;
+            case '0': zeroPad = true; break;
+            case '#': altForm = true; break;
+        }
+        i++;
+    }
+    /* width */
+    let widthStr = "";
+    while (i < body.length && body[i] >= '0' && body[i] <= '9') {
+        widthStr += body[i];
+        i++;
+    }
+    if (widthStr) width = parseInt(widthStr, 10);
+    /* precision */
+    if (i < body.length && body[i] === '.') {
+        i++;
+        let precStr = "";
+        while (i < body.length && body[i] >= '0' && body[i] <= '9') {
+            precStr += body[i];
+            i++;
+        }
+        precision = precStr ? parseInt(precStr, 10) : 0;
+    }
+
+    /* Produce the numeric string (without sign/padding) for the specifier. */
+    let negative = false, digits;
+    let big = I64.toBigInt(n);
+
+    /* For 'u', treat as unsigned 64-bit. For 'x'/'X'/'o' the value is
+       interpreted as unsigned too. For 'd'/'i' it is signed. */
+    if (spec === 'd' || spec === 'i') {
+        negative = big < 0n;
+        let absVal = negative ? -big : big;
+        digits = absVal.toString(10);
+    } else if (spec === 'u') {
+        let u = BigInt.asUintN(64, big);
+        digits = u.toString(10);
+    } else if (spec === 'x' || spec === 'X') {
+        let u = BigInt.asUintN(64, big);
+        digits = u.toString(16);
+        if (spec === 'X') digits = digits.toUpperCase();
+    } else if (spec === 'o') {
+        let u = BigInt.asUintN(64, big);
+        digits = u.toString(8);
+    } else {
+        /* Fallback — should not happen. */
+        digits = I64.toDecimalString(n);
+        negative = big < 0n;
+    }
+
+    /* Precision: minimum number of digits (zero-padded on the left). */
+    if (precision >= 0) {
+        if (precision === 0 && digits === "0") {
+            digits = "";  /* %.0d of 0 produces empty string */
+        } else {
+            while (digits.length < precision) digits = "0" + digits;
+        }
+        zeroPad = false;  /* precision suppresses zero-flag */
+    }
+
+    /* Alt form prefixes */
+    let prefix = "";
+    if (altForm) {
+        if (spec === 'o') {
+            /* Ensure leading 0 */
+            if (digits[0] !== '0') prefix = "0";
+        } else if (spec === 'x') {
+            if (digits !== "" && digits !== "0") prefix = "0x";
+        } else if (spec === 'X') {
+            if (digits !== "" && digits !== "0") prefix = "0X";
+        }
+    }
+
+    /* Sign / space prefix for signed conversions. */
+    let sign = "";
+    if (spec === 'd' || spec === 'i') {
+        if (negative) sign = "-";
+        else if (plusSign) sign = "+";
+        else if (spaceSign) sign = " ";
+    }
+
+    /* Assemble the number portion (prefix + digits). */
+    let number = prefix + digits;
+    let totalLen = sign.length + number.length;
+
+    /* Padding. */
+    let result;
+    if (totalLen >= width) {
+        result = sign + number;
+    } else if (leftAlign) {
+        result = sign + number + " ".repeat(width - totalLen);
+    } else if (zeroPad) {
+        /* Zero-pad goes between sign/prefix-hint and digits, but for
+           simplicity (matching C printf for the common cases) we put
+           zeros after the sign. For x/X the 0x prefix stays before zeros. */
+        if (prefix) {
+            let padCount = width - totalLen;
+            result = sign + prefix + "0".repeat(padCount) + digits;
+        } else {
+            result = sign + "0".repeat(width - totalLen) + number;
+        }
+    } else {
+        result = " ".repeat(width - totalLen) + sign + number;
+    }
+
+    return result;
+};
 
 const {
     LUA_INTEGER_FMT,
@@ -279,10 +427,15 @@ const addliteral = function(L, b, arg) {
                 checkdp(buff);  /* ensure it uses a dot */
             } else {  /* integers */
                 let n = lua_tointeger(L, arg);
-                let format = (n === LUA_MININTEGER)  /* corner case? */
-                    ? "0x%" + LUA_INTEGER_FRMLEN + "x"  /* use hexa */
-                    : LUA_INTEGER_FMT;  /* else use default format */
-                buff = to_luastring(sprintf(format, n));
+                if (I64.eq(n, LUA_MININTEGER)) {
+                    /* corner case: print MININTEGER in hex to avoid the
+                       unary-minus-on-MAXINT+1 parsing problem */
+                    let u = BigInt.asUintN(64, I64.toBigInt(n));
+                    buff = to_luastring("0x" + u.toString(16));
+                } else {
+                    let format = to_luastring(LUA_INTEGER_FMT, true);
+                    buff = to_luastring(formatInteger(format, n));
+                }
             }
             luaL_addstring(b, buff);
             break;
@@ -350,15 +503,17 @@ const str_format = function(L) {
             i = scanformat(L, strfrmt, i, form);
             switch (String.fromCharCode(strfrmt[i++])) {
                 case 'c': {
-                    // sprintf(String.fromCharCode(...form), luaL_checkinteger(L, arg));
-                    luaL_addchar(b, luaL_checkinteger(L, arg));
+                    let c = luaL_checkinteger(L, arg);
+                    /* Character code must fit in a byte. For BigInt, convert via Number. */
+                    let code = typeof c === "bigint" ? Number(c) : c;
+                    luaL_addchar(b, code & 0xFF);
                     break;
                 }
                 case 'd': case 'i':
                 case 'o': case 'u': case 'x': case 'X': {
                     let n = luaL_checkinteger(L, arg);
                     addlenmod(form, to_luastring(LUA_INTEGER_FRMLEN, true));
-                    luaL_addstring(b, to_luastring(sprintf(String.fromCharCode(...form), n)));
+                    luaL_addstring(b, to_luastring(formatInteger(form, n)));
                     break;
                 }
                 case 'a': case 'A': {
@@ -370,7 +525,7 @@ const str_format = function(L) {
                 case 'g': case 'G': {
                     let n = luaL_checknumber(L, arg);
                     addlenmod(form, to_luastring(LUA_INTEGER_FRMLEN, true));
-                    luaL_addstring(b, to_luastring(sprintf(String.fromCharCode(...form), n)));
+                    luaL_addstring(b, to_luastring(fixExponent(sprintf(String.fromCharCode(...form), n))));
                     break;
                 }
                 case 'q': {
@@ -581,21 +736,21 @@ const getdetails = function(h, totalsize, fmt) {
 ** bytes from each word in turn, applying sign extension for negative
 ** numbers beyond the high word when `size > 8`.
 */
-const TWO_POW_32_STR = 0x100000000; /* 2^32 */
-
+/*
+** Pack integer 'n' with 'size' bytes and 'islittle' endianness.
+** Handles the full 64-bit lua_Integer range (including BigInt values)
+** by working with the BigInt representation and emitting bytes via
+** BigInt.asUintN masking. For size > 8, sign-extension bytes are added.
+*/
 const packint = function(b, n, islittle, size, neg) {
     let buff = luaL_prepbuffsize(b, size);
-    /* Split into low (unsigned 32) and high (signed 32) words. */
-    let lo = n >>> 0;
-    let hi = (n - lo) / TWO_POW_32_STR | 0;
+    let big = I64.toBigInt(n);
     for (let i = 0; i < size; i++) {
         let byte;
-        if (i < 4) {
-            byte = (lo >> (i * NB)) & MC;
-        } else if (i < 8) {
-            byte = (hi >> ((i - 4) * NB)) & MC;
+        if (i < 8) {
+            byte = Number(BigInt.asUintN(8, big >> BigInt(i * NB)));
         } else {
-            /* size > 8: sign-extend the remaining bytes */
+            /* size > 8: sign-extend remaining bytes */
             byte = neg ? MC : 0;
         }
         buff[islittle ? i : size - 1 - i] = byte;
@@ -842,28 +997,33 @@ const unpackint = function(L, str, islittle, size, issigned) {
         return res;
     }
 
-    /* 64-bit path: assemble high and low 32-bit words separately. */
-    let lo = 0;   /* unsigned 32-bit */
-    let hi = 0;   /* signed 32-bit   */
-    /* low word: bytes 0..3 */
-    for (let i = 3; i >= 0; i--) {
-        lo = (lo << NB) | str[islittle ? i : size - 1 - i];
+    /* 64-bit path: accumulate bytes into a BigInt to preserve full range. */
+    let res = 0n;
+    for (let i = size - 1; i >= 0; i--) {
+        let byte = str[islittle ? i : size - 1 - i];
+        res = (res << BigInt(NB)) | BigInt(byte);
     }
-    lo = lo >>> 0; /* force unsigned */
-    /* high word: bytes 4..7 */
-    for (let i = 7; i >= 4; i--) {
-        hi = (hi << NB) | str[islittle ? i : size - 1 - i];
-    }
-    hi = hi | 0; /* force signed */
 
     if (size > SZINT) {  /* must check unread bytes for consistency */
-        let mask = (!issigned || (hi < 0)) ? MC : 0;
+        /* Sign-extended bytes beyond SZINT must all be 0xFF (if negative)
+           or 0x00 (if positive). Determine sign from the SZINT-th byte. */
+        let signByte = str[islittle ? SZINT - 1 : size - SZINT];
+        let neg = issigned && (signByte & 0x80) !== 0;
+        let mask = neg ? MC : 0;
         for (let i = SZINT; i < size; i++) {
             if (str[islittle ? i : size - 1 - i] !== mask)
                 luaL_error(L, to_luastring("%d-byte integer does not fit into Lua Integer"), size);
         }
+        /* Truncate to 64 bits. */
+        res = BigInt.asIntN(64, res);
+    } else if (issigned) {
+        /* Sign-extend to 64 bits. */
+        res = BigInt.asIntN(SZINT * NB, res);
+    } else {
+        /* unsigned: keep as unsigned 64-bit then wrap to signed range. */
+        res = BigInt.asIntN(SZINT * NB, res);
     }
-    return hi * TWO_POW_32_STR + lo;
+    return I64.shrink(res);
 };
 
 const unpacknum = function(L, b, islittle, size) {

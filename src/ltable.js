@@ -22,6 +22,7 @@ const {
     LUA_MAXINTEGER
 } = require('./luaconf.js');
 const { lua_assert } = require('./llimits.js');
+const I64 = require('./lint64.js');
 const ldebug  = require('./ldebug.js');
 const lobject = require('./lobject.js');
 const {
@@ -220,9 +221,17 @@ const luaH_setfrom = function(L, t, key, value) {
     } else {
         let k;
         let kv = key.value;
-        if ((key.ttisfloat() && (kv|0) === kv)) { /* does index fit in an integer? */
-            /* insert it as an integer */
-            k = new lobject.TValue(LUA_TNUMINT, kv);
+        if (key.ttisfloat()) {
+            /* Does the float index fit in an integer? Use I64.fromFloat
+               with strict mode (0) so only integral floats convert.
+               This handles the full 64-bit range, unlike the old
+               (kv|0) === kv check which truncated to 32 bits. */
+            let asInt = I64.fromFloat(kv, 0);
+            if (asInt !== null) {
+                k = new lobject.TValue(LUA_TNUMINT, asInt);
+            } else {
+                k = new lobject.TValue(key.type, kv);
+            }
         } else {
             k = new lobject.TValue(key.type, kv);
         }
@@ -241,7 +250,10 @@ const luaH_getn = function(t) {
     /* find 'i' and 'j' such that i is present and j is not */
     while (!(luaH_getint(t, j).ttisnil())) {
         i = j;
-        if (j > LUA_MAXINTEGER / 2) {  /* overflow? */
+        /* overflow guard: if j exceeds half of MAXINTEGER, doubling
+           would overflow. Use Number comparison against the safe threshold
+           since j is a JS Number that has already grown large. */
+        if (j > 0x3FFFFFFFFFFFFFFF) {  /* > (2^62 - 1), roughly MAXINTEGER/2 */
             /* table was built with bad purposes: resort to linear search */
             i = 1;
             while (!luaH_getint(t, i).ttisnil()) i++;

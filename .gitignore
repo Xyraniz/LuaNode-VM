@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Test coverage
+coverage/
+
+# Temporary files
+test_*.js
+test2.js
+test_current.js
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
