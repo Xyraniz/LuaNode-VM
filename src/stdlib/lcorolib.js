@@ -39,13 +39,13 @@ const {
     lua_upvalueindex,
     lua_xmove,
     lua_yield
-} = require('./lua.js');
+} = require('../lua.js');
 const {
     luaL_argcheck,
     luaL_checktype,
     luaL_newlib,
     luaL_where
-} = require('./lauxlib.js');
+} = require('../lauxlib.js');
 
 const getco = (L) => {
     const co = lua_tothread(L, 1);
