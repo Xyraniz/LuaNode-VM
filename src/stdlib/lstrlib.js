@@ -10,7 +10,7 @@ const {
     LUA_NUMBER_FRMLEN,
     frexp,
     lua_getlocaledecpoint
-} = require('./luaconf.js');
+} = require('../luaconf.js');
 const {
     LUA_TBOOLEAN,
     LUA_TFUNCTION,
@@ -46,7 +46,7 @@ const {
     lua_touserdata,
     lua_type,
     lua_upvalueindex
-} = require('./lua.js');
+} = require('../lua.js');
 const {
     luaL_Buffer,
     luaL_addchar,
@@ -72,14 +72,14 @@ const {
     luaL_pushresultsize,
     luaL_tolstring,
     luaL_typename
-} = require('./lauxlib.js');
+} = require('../lauxlib.js');
 const lualib = require('./lualib.js');
 const {
     luastring_eq,
     luastring_indexOf,
     to_jsstring,
     to_luastring
-} = require("./fengaricore.js");
+} = require("../fengaricore.js");
 
 const sL_ESC  = '%';
 const L_ESC   = sL_ESC.charCodeAt(0);
