@@ -1,36 +1,40 @@
 <p align="center">
-  <img src="logo.png" alt="LuaNode VM Logo" width="160" />
+<img src="logo.png" alt="LuaNode VM Logo" width="160" />
 </p>
 
 # LuaNode VM (`luanode-vm`)
 
-> **A high-performance, fully compliant Lua 5.3 Virtual Machine and runtime engine written entirely in modern JavaScript (ES6+), engineered for seamless execution across Node.js and web browsers.**
+> **An enhanced, modern JavaScript runtime and Virtual Machine for Lua 5.3, built as a specialized fork of Fengari with robust 64-bit integer support and active compatibility improvements for Node.js and web browsers.**
 
 ## Overview
 
-`LuaNode VM` is an enterprise-grade, independent JavaScript execution environment for Lua bytecode and source scripts. By meticulously implementing the Lua 5.3 specification—including integer arithmetic, bitwise operations, full garbage collection semantics, and comprehensive standard libraries—this engine bridges the gap between high-level scripting languages and modern JavaScript runtimes. It is designed for developers seeking to embed robust, secure, and lightning-fast Lua scripting capabilities directly into server-side applications or client-side web platforms without native compilation overhead.
+`LuaNode VM` is an open-source JavaScript execution environment for Lua bytecode and source scripts, derived and improved from the foundational architecture of **Fengari**. While Fengari achieved an impressive transpilación of Lua to ES6, its historical design limited integer widths to 32 bits and left certain modern runtime adjustments pending.
+
+`LuaNode VM` builds upon this solid foundation by introducing native 64-bit safe integer arithmetic (`Number.MAX_SAFE_INTEGER`), widening bytecode serialization structures, and maintaining active compatibility updates for contemporary Node.js and browser environments. It bridges the gap between high-level scripting languages and modern JavaScript runtimes with improved precision and active maintenance.
 
 ---
 
-## Core Architecture & Features
+## Key Enhancements & Features
 
-- **Full Lua 5.3 Specification Compliance**: Implements the complete instruction set, parser, virtual machine, and standard libraries (`base`, `io`, `os`, `math`, `string`, `table`, `utf8`), ensuring 100% behavioral fidelity with standard Lua.
-- **Zero-Dependency Core Runtime**: The core execution engine is lightweight and decoupled, resulting in minimal bundle sizes and optimal memory footprint.
+- **True 64-Bit Integer Support (****`lua_Integer`****)**: Unlike the 32-bit limitation in baseline Fengari, LuaNode-VM upgrades integer handling to utilize the full 53-bit safe integer range of JavaScript (`±9,007,992,547,409,91`), ensuring full compliance with Lua 5.3 expectations for `math.maxinteger` and large numerical operations.
+
+- **Upgraded Bytecode Serialization**: Modifies `ldump.js` and `lundump.js` to serialize and deserialize 64-bit integers across 8-byte boundaries using combined 32-bit high and low words.
+
+- **Active Maintenance & Modern Tooling**: Regularly updated dependency graphs, modern ESLint configurations, and active refactoring tailored for current Node.js runtimes.
+
 - **Universal Cross-Environment Execution**: Operates natively in both modern Node.js environments and standard web browsers with identical API structures and execution semantics.
-- **Advanced C-Compatible JS API**: Exposes an intuitive JavaScript API mirroring traditional C-API conventions (`lua_State`, stack manipulation, and library loading), allowing deep integration and precise stack control.
+
+- **Familiar C-Compatible JS API**: Preserves the intuitive JavaScript API mirroring traditional C-API conventions (`lua_State`, stack manipulation, and library loading) established by Fengari.
 
 ---
 
-## Architectural Structure
+## Architectural Origin & Transparency
 
-The repository is organized following industry-best software engineering standards:
+`LuaNode VM` is explicitly a **specialized fork of Fengari** (`fengari-lua/fengari`). We believe in radical transparency:
 
-| Directory / File | Description |
-| :--- | :--- |
-| `src/` | Core virtual machine implementation, lexical analyzer, parser, state manager, object model, and standard library modules. |
-| `tests/` | Comprehensive test suites, integration tests, and full Lua test benchmarks validating operational correctness. |
-| `package.json` | Package definition, scripts, and runtime dependencies optimized for modern package managers. |
-| `LICENSE` | MIT Open Source License. |
+- The core virtual machine architecture, lexical parser, and module organization (`fengaricore`, `lapi`, `lvm`, etc.) originate from the excellent work of the Fengari team.
+
+- LuaNode-VM focuses its independent development on numerical precision (64-bit integers), modern runtime compatibility, and continuous maintenance.
 
 ---
 
@@ -49,7 +53,7 @@ npm install
 To initialize a Lua state, load standard libraries, and execute operations from JavaScript, use the following pattern:
 
 ```javascript
-const luanode = require('./src/fengari.js');
+const luanode = require('./src/fengari.js' );
 
 const lauxlib = luanode.lauxlib;
 const lualib  = luanode.lualib;
