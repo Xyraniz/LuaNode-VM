@@ -52,7 +52,7 @@ const {
     lua_tostring,
     lua_type,
     lua_typename
-} = require('./lua.js');
+} = require('../lua.js');
 const {
     luaL_argcheck,
     luaL_checkany,
@@ -70,11 +70,11 @@ const {
     luaL_setfuncs,
     luaL_tolstring,
     luaL_where
-} = require('./lauxlib.js');
+} = require('../lauxlib.js');
 const {
     to_jsstring,
     to_luastring
-} = require("./fengaricore.js");
+} = require("../fengaricore.js");
 
 let lua_writestring;
 let lua_writeline;
