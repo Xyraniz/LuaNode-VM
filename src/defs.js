@@ -2,43 +2,20 @@
 
 /*
  * Fengari specific string conversion functions
+ *
+ * These helpers rely on native TypedArray methods (Uint8Array.from, .of, .indexOf)
+ * which are part of ES2015 and universally available in Node.js 6+ and all
+ * modern browsers. The original polyfill fallback branches for legacy engines
+ * (e.g. IE11) have been removed.
  */
 
-let luastring_from;
-if (typeof Uint8Array.from === "function") {
-    luastring_from = Uint8Array.from.bind(Uint8Array);
-} else {
-    luastring_from = function(a) {
-        let i = 0;
-        let len = a.length;
-        let r = new Uint8Array(len);
-        while (len > i) r[i] = a[i++];
-        return r;
-    };
-}
+const luastring_from = Uint8Array.from.bind(Uint8Array);
 
-let luastring_indexOf;
-if (typeof (new Uint8Array().indexOf) === "function") {
-    luastring_indexOf = function(s, v, i) {
-        return s.indexOf(v, i);
-    };
-} else {
-    /* Browsers that don't support Uint8Array.indexOf seem to allow using Array.indexOf on Uint8Array objects e.g. IE11 */
-    let array_indexOf = [].indexOf;
-    if (array_indexOf.call(new Uint8Array(1), 0) !== 0) throw Error("missing .indexOf");
-    luastring_indexOf = function(s, v, i) {
-        return array_indexOf.call(s, v, i);
-    };
-}
+const luastring_indexOf = function(s, v, i) {
+    return s.indexOf(v, i);
+};
 
-let luastring_of;
-if (typeof Uint8Array.of === "function") {
-    luastring_of = Uint8Array.of.bind(Uint8Array);
-} else {
-    luastring_of = function() {
-        return luastring_from(arguments);
-    };
-}
+const luastring_of = Uint8Array.of.bind(Uint8Array);
 
 const is_luastring = function(s) {
     return s instanceof Uint8Array;
@@ -67,7 +44,27 @@ const to_jsstring = function(value, from, to, replacement_char) {
     }
 
     let str = "";
-    for (let i = (from!==void 0?from:0); i < to;) {
+    let start = (from!==void 0?from:0);
+    /* Fast path: when the entire range is pure ASCII, decode in one shot.
+       This avoids the O(n^2) cost of per-character string concatenation for
+       the overwhelmingly common case of ASCII-only lua strings. */
+    let allAscii = true;
+    for (let i = start; i < to; i++) {
+        if (value[i] >= 0x80) { allAscii = false; break; }
+    }
+    if (allAscii) {
+        /* String.fromCharCode.apply handles up to ~64k args in V8; chunk if larger */
+        const CHUNK = 0x8000;
+        if (to - start <= CHUNK) {
+            return String.fromCharCode.apply(null, value.subarray(start, to));
+        }
+        let s = "";
+        for (let i = start; i < to; i += CHUNK) {
+            s += String.fromCharCode.apply(null, value.subarray(i, Math.min(i + CHUNK, to)));
+        }
+        return s;
+    }
+    for (let i = start; i < to;) {
         let u0 = value[i++];
         if (u0 < 0x80) {
             /* single byte sequence */
@@ -154,24 +151,35 @@ const to_jsstring = function(value, from, to, replacement_char) {
 };
 
 /* bytes allowed unescaped in a uri */
-const uri_allowed = (";,/?:@&=+$abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789,-_.!~*'()#").split('').reduce(function(uri_allowed, c) {
-    uri_allowed[c.charCodeAt(0)] = true;
-    return uri_allowed;
-}, {});
+/* bytes allowed unescaped in a uri */
+const uri_allowed = (function() {
+    /* Build a boolean lookup table indexed by byte value (0-255) for O(1) tests */
+    const allowed = ";,/?:@&=+$abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789,-_.!~*'()#";
+    const table = new Uint8Array(256);
+    for (let i = 0; i < allowed.length; i++) {
+        table[allowed.charCodeAt(i)] = 1;
+    }
+    return table;
+})();
 
 /* utility function to convert a lua string to a js string with uri escaping */
 const to_uristring = function(a) {
     if (!is_luastring(a)) throw new TypeError("to_uristring expects a Uint8Array");
-    let s = "";
-    for (let i=0; i<a.length; i++) {
-        let v = a[i];
+    const len = a.length;
+    const parts = [];
+    let ascii = "";
+    for (let i = 0; i < len; i++) {
+        const v = a[i];
         if (uri_allowed[v]) {
-            s += String.fromCharCode(v);
+            /* accumulate consecutive ASCII-safe bytes to reduce concatenations */
+            ascii += String.fromCharCode(v);
         } else {
-            s += "%" + (v<0x10?"0":"") + v.toString(16);
+            if (ascii.length) { parts.push(ascii); ascii = ""; }
+            parts.push("%" + (v<0x10?"0":"") + v.toString(16));
         }
     }
-    return s;
+    if (ascii.length) parts.push(ascii);
+    return parts.length <= 1 ? (parts[0] || "") : parts.join("");
 };
 
 const to_luastring_cache = {};
@@ -195,7 +203,7 @@ const to_luastring = function(str, cache) {
             outU8Array[outIdx++] = 0xC0 | (u >> 6);
             outU8Array[outIdx++] = 0x80 | (u & 63);
         } else {
-            /* This part is to work around possible lack of String.codePointAt */
+            /* Handle surrogate pairs (UTF-16) to correctly encode astral code points */
             if (u >= 0xD800 && u <= 0xDBFF && (i+1) < len) {
                 /* is first half of surrogate pair */
                 let v = str.charCodeAt(i+1);
