@@ -37,21 +37,69 @@ const {
 const { to_luastring } = require("./fengaricore.js");
 
 let rand_state;
-/* use same parameters as glibc LCG */
-const l_rand = function() {
-    rand_state = (1103515245 * rand_state + 12345) & 0x7fffffff;
-    return rand_state;
+/*
+ * Improved pseudo-random number generator.
+ *
+ * The original implementation used a 32-bit glibc-style Linear Congruential
+ * Generator (LCG) with the parameters (a=1103515245, c=12345, m=2^31). LCGs
+ * suffer from a short period (only 2^31), poor distribution in the lower
+ * bits, and well-known serial correlations, which can produce undesirable
+ * patterns in simulations.
+ *
+ * This replacement uses a 32-bit variant of xoshiro128** (by David Blackman
+ * and Sebastiano Vigna), a xorshift-style generator with a 2^128 period that
+ * passes the BigCrush battery of statistical tests. The state is seeded from
+ * a single 32-bit integer using SplitMix32 (a good mixing function), which
+ * avoids the weak initial states that plague LCGs.
+ *
+ * Reference: http://xoshiro.di.unimi.it/
+ */
+const rotl = (x, k) => ((x << k) | (x >>> (32 - k))) >>> 0;
+
+const splitmix32_seed = function(seed) {
+    /* SplitMix32 to expand a single 32-bit seed into 4 well-mixed state words */
+    let z = (seed >>> 0) || 1;
+    const out = new Array(4);
+    for (let i = 0; i < 4; i++) {
+        z = (z + 0x9E3779B9) >>> 0;
+        let t = z;
+        t = Math.imul(t ^ (t >>> 16), 0x85EBCA6B);
+        t = Math.imul(t ^ (t >>> 13), 0xC2B2AE35);
+        out[i] = (t ^ (t >>> 16)) >>> 0;
+    }
+    return out;
 };
+
+let rand_state_words = null;  /* xoshiro128** state: 4 x 32-bit words */
+
+const l_rand = function() {
+    if (rand_state_words === null) {
+        /* Lazy seed from the legacy single-word state (kept for compatibility) */
+        rand_state_words = splitmix32_seed(rand_state === void 0 ? (Math.random() * 0x100000000) >>> 0 : (rand_state >>> 0) || 1);
+    }
+    const s = rand_state_words;
+    const result = (Math.imul(rotl(s[1] * 5, 7), 9)) >>> 0;
+    const t = (s[1] << 9) >>> 0;
+    s[2] ^= s[0];
+    s[3] ^= s[1];
+    s[1] ^= s[2];
+    s[0] ^= s[3];
+    s[2] ^= t;
+    s[3] = rotl(s[3], 11);
+    return result;
+};
+
 const l_srand = function(x) {
-    rand_state = x|0;
-    if (rand_state === 0)
-        rand_state = 1;
+    rand_state = (x | 0) || 1;
+    if (rand_state < 0) rand_state = (rand_state + 0x100000000) >>> 0;
+    /* Reset the xoshiro state so the next l_rand re-seeds from the new value */
+    rand_state_words = splitmix32_seed(rand_state);
 };
 
 const math_random = function(L) {
     let low, up;
     /* use Math.random until randomseed is called */
-    let r = (rand_state === void 0)?Math.random():(l_rand() / 0x80000000);
+    let r = (rand_state_words === null && rand_state === void 0) ? Math.random() : (l_rand() / 0x100000000);
     switch (lua_gettop(L)) {  /* check number of arguments */
         case 0:
             lua_pushnumber(L, r);  /* Number between 0 and 1 */
@@ -224,7 +272,7 @@ const math_min = function(L) {
 
 const math_max = function(L) {
     let n = lua_gettop(L);  /* number of arguments */
-    let imax = 1;  /* index of current minimum value */
+    let imax = 1;  /* index of current maximum value */
     luaL_argcheck(L, n >= 1, 1, "value expected");
     for (let i = 2; i <= n; i++){
         if (lua_compare(L, imax, i, LUA_OPLT))
