@@ -328,9 +328,9 @@ const strftime = function(L, b, s, date) {
                     luaL_addstring(b, to_luastring(String(Math.floor(date / 1000))));
                     break;
 
-                // '\t'
+                // '\t'  (tab character — char code 9, NOT 8 which is backspace)
                 case 116 /* t */:
-                    luaL_addchar(b, 8);
+                    luaL_addchar(b, 9);
                     break;
 
                 // '4'
@@ -407,8 +407,6 @@ const os_date = function(L) {
         lua_createtable(L, 0, 9);  /* 9 = number of fields */
         setallfields(L, stm, utc);
     } else {
-        let cc = new Uint8Array(4);
-        cc[0] = "%".charCodeAt(0);
         let b = new luaL_Buffer();
         luaL_buffinit(L, b);
         strftime(L, b, s, stm);
