@@ -4,28 +4,30 @@
 
 # LuaNode-VM
 
-> **A Lua 5.3 Virtual Machine implemented in modern JavaScript, featuring true 64-bit integer arithmetic via BigInt — something the original Fengari never achieved.**
+> **A Lua 5.3 Virtual Machine implemented in modern JavaScript, featuring true 64-bit integer arithmetic via BigInt — extending Fengari's 32-bit integers to the full int64 range of PUC-Rio Lua.**
 
 ## Overview
 
-LuaNode-VM is a JavaScript implementation of the Lua 5.3 virtual machine, originally derived from [Fengari](https://github.com/fengari-lua/fengari) and substantially overhauled to fix a critical correctness flaw: **Fengari used JavaScript `Number` (IEEE-754 double) to represent Lua's `lua_Integer`, which limited integers to the 53-bit safe-integer range (±9,007,199,254,740,991).** This meant that `math.maxinteger` reported `9007199254740991` instead of the correct `9223372036854775807`, integer overflow wraparound was silently broken, and any literal above 2^53 lost precision.
+LuaNode-VM is a JavaScript implementation of the Lua 5.3 virtual machine, originally derived from [Fengari](https://github.com/fengari-lua/fengari) and substantially overhauled to address Fengari's integer width. **Fengari represents Lua's `lua_Integer` as a signed 32-bit integer: its `luaconf.js` defines `LUA_MAXINTEGER = 2147483647` and `LUA_MININTEGER = -2147483648` (2^31−1 / −2^31), with correct two's-complement wraparound at that width.** This is a deliberate, documented design decision in Fengari (equivalent to building PUC-Rio Lua with `LUA_INT_TYPE=LUA_INT_LONG` on a platform where `long` is 32 bits) — not a bug — but it diverges from PUC-Rio Lua 5.3, whose `lua_Integer` is a full 64-bit `int64_t` (`LUA_MAXINTEGER = 9223372036854775807`).
 
-LuaNode-VM solves this with a **hybrid Number/BigInt representation**: values within the safe-integer range use plain `Number` for speed, while values outside that range — up to the full signed 64-bit span — use `BigInt`. All arithmetic, bitwise, comparison, parsing, formatting, bytecode serialization, and table operations have been rewritten to respect true int64 semantics with two's-complement wraparound modulo 2^64, exactly matching PUC-Rio Lua 5.3.
+LuaNode-VM closes that gap with a **hybrid Number/BigInt representation**: values within the JS safe-integer range (±2^53−1) use plain `Number` for speed, while values outside that range — up to the full signed 64-bit span — use `BigInt`. All arithmetic, bitwise, comparison, parsing, formatting, bytecode serialization, and table operations have been rewritten to respect true int64 semantics with two's-complement wraparound modulo 2^64, exactly matching PUC-Rio Lua 5.3.
 
-### What Was Wrong in Fengari (and Is Fixed Here)
+> **Note on a previous version of this README:** An earlier revision claimed that Fengari used JavaScript `Number` (IEEE-754 double) for `lua_Integer` and therefore reported `math.maxinteger = 9007199254740991` (2^53−1). **That claim was inaccurate.** Fengari uses 32-bit integers (`2147483647`), not double-precision floats truncated to 53 bits. The comparison has been corrected below to reflect what Fengari's source code actually does. The genuine advantage of LuaNode-VM is widening the integer type from 32 bits to a full 64 bits — not "fixing a 53-bit truncation."
+
+### The Real Difference: Fengari's 32-bit Integers vs. LuaNode-VM's 64-bit Integers
 
 | Issue | Fengari (original) | LuaNode-VM |
 |-------|-------------------|------------|
-| `math.maxinteger` | `9007199254740991` (2^53−1) | `9223372036854775807` (2^63−1) ✓ |
-| `math.mininteger` | `-9007199254740991` | `-9223372036854775808` ✓ |
-| `math.maxinteger + 1` | `9007199254740992` (wrong, no wrap) | `-9223372036854775808` (correct wraparound) ✓ |
-| Literal `9223372036854775807` | Loses precision (becomes float) | Exact integer ✓ |
-| Literal `9007199254740993` | Rounded to `...992` | Exact: `9007199254740993` ✓ |
-| Integer overflow wraparound | Broken (float semantics) | Two's-complement mod 2^64 ✓ |
-| `string.format("%d", big_int)` | Wrong / truncated | Full 64-bit precision ✓ |
-| `string.pack`/`unpack` with `i8` | 32-bit truncation | Full 64-bit ✓ |
-| Bytecode dump/load of large ints | Precision loss | Exact 8-byte LE round-trip ✓ |
-| Table keys above 2^53 | Collision (Number coercion) | Distinct keys via BigInt ✓ |
+| `math.maxinteger` | `2147483647` (2^31−1, by design) | `9223372036854775807` (2^63−1) ✓ |
+| `math.mininteger` | `-2147483648` (−2^31, by design) | `-9223372036854775808` (−2^63) ✓ |
+| `math.maxinteger + 1` | wraps to `-2147483648` (correct 32-bit wraparound) | wraps to `-9223372036854775808` (correct 64-bit wraparound) ✓ |
+| Literal `9223372036854775807` | out of 32-bit range → parsed as float (precision loss beyond 2^53) | exact 64-bit integer ✓ |
+| Literal `9007199254740993` | out of 32-bit range → parsed as float, rounded to `...992` | exact integer: `9007199254740993` ✓ |
+| Integer overflow width | 32-bit two's-complement | 64-bit two's-complement mod 2^64 ✓ |
+| `string.format("%d", big_int)` | fails/truncates above 2^31−1 | full 64-bit precision ✓ |
+| `string.pack`/`unpack` with `i8` | fails for values above 2^31−1 ("number has no integer representation") | full 64-bit ✓ |
+| Bytecode dump/load of large ints | precision loss / float fallback | exact 8-byte LE round-trip ✓ |
+| Table keys above 2^31 | coerced to float (collisions above 2^53) | distinct keys via BigInt ✓ |
 
 ---
 
@@ -51,7 +53,7 @@ LuaNode-VM solves this with a **hybrid Number/BigInt representation**: values wi
 
 - **CLI runner**: Execute `.lua` scripts directly from the command line with `node cli/luanode.js script.lua args...`.
 
-- **Comprehensive test suite**: 126+ Jest tests covering 64-bit integers, string formatting, table operations, coroutines, closures, metatables, and general Lua 5.3 regression.
+- **Comprehensive test suite**: 145+ Jest tests covering 64-bit integers, string formatting, table operations, coroutines, closures, metatables, lexer buffer-growth regression (string literals up to 10000 chars), `collectgarbage`, and general Lua 5.3 regression.
 
 ---
 
@@ -106,7 +108,7 @@ if (lauxlib.luaL_loadstring(L, to_luastring(code)) === lua.LUA_OK) {
 ### 64-bit Integer Demonstration
 
 ```lua
--- math.maxinteger is the REAL 2^63-1, not 2^53-1
+-- math.maxinteger is the REAL 2^63-1 (Fengari reports 2^31-1 = 2147483647)
 print(math.maxinteger)        --> 9223372036854775807
 print(math.mininteger)        --> -9223372036854775808
 
@@ -143,7 +145,7 @@ print(t[9007199254740993])    --> hello
 
 ## Testing
 
-LuaNode-VM includes a comprehensive Jest test suite (126+ tests) verifying:
+LuaNode-VM includes a comprehensive Jest test suite (145+ tests) verifying:
 
 - **64-bit integer limits and literals** (`tests/int64.test.js`)
 - **Overflow wraparound semantics** (`tests/int64.test.js`)
@@ -151,6 +153,7 @@ LuaNode-VM includes a comprehensive Jest test suite (126+ tests) verifying:
 - **String formatting with large integers** (`tests/string-format.test.js`)
 - **Table operations with large integer keys** (`tests/table-keys.test.js`)
 - **Regression tests for general Lua 5.3 functionality** (`tests/regression.test.js`)
+- **Lexer token-buffer growth regression** (`tests/lexer-buffer.test.js`) — string literals, identifiers, comments, and error messages of 31–10000 characters, plus `collectgarbage`
 
 ```bash
 # Run all tests
@@ -195,7 +198,9 @@ LuaNode-VM is explicitly a **specialized fork of Fengari** (`fengari-lua/fengari
 
 - LuaNode-VM's independent development focuses on: (1) true 64-bit integer support via BigInt, (2) comprehensive correctness testing, (3) modern tooling (ESLint, CI, CLI), and (4) a truthful, accurate README.
 
-- We acknowledge that prior versions of this README made inaccurate claims about "64-bit integer support" that were, in reality, limited to JavaScript's 53-bit safe-integer range. This has been corrected — the claims in this README are verified by the test suite and can be independently confirmed by running the code.
+- We acknowledge that prior versions of this README made inaccurate claims about "64-bit integer support" that were, in reality, limited to JavaScript's 53-bit safe-integer range, and — separately — incorrectly characterized Fengari as using double-precision floats truncated to 53 bits. Both have been corrected: Fengari uses 32-bit integers (`2147483647`), and LuaNode-VM delivers genuine 64-bit integers. The claims in this README are verified by the test suite and can be independently confirmed by inspecting [Fengari's `src/luaconf.js`](https://github.com/fengari-lua/fengari/blob/master/src/luaconf.js) and running the code here.
+
+- We also acknowledge and have fixed a critical lexer bug present in early revisions: because `MAX_INT` was changed from a JS `Number` to a `BigInt`, the lexer's token-buffer growth check (`b.buffer.length >= MAX_INT/2`) mixed a `Number` with a `BigInt` under arithmetic and threw `TypeError: Cannot mix BigInt and other types`. That line only executed the first time a token grew past `LUA_MINBUFFER` (32 bytes), so **any** string literal, identifier, comment, or error message of ~31+ characters silently killed the interpreter (exit status `-1`, "no error message"). This is now fixed (see `src/vm/llex.js`) and covered by regression tests in `tests/lexer-buffer.test.js`, which verify string literals up to 10000 characters parse and execute correctly.
 
 ---
 

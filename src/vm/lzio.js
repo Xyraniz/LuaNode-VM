@@ -22,9 +22,16 @@ const luaZ_resetbuffer = function(buff) {
 };
 
 const luaZ_resizebuffer = function(L, buff, size) {
-    let newbuff = new Uint8Array(size);
-    if (buff.buffer)
-        newbuff.set(buff.buffer);
+    const newbuff = new Uint8Array(size);
+    if (buff.buffer) {
+        /* Only copy the bytes actually in use (buff.n), capped to the new
+           size. Copying the whole old buffer (its full capacity) would
+           throw a RangeError whenever the buffer is shrunk to a smaller
+           size than its previous capacity. */
+        const n = buff.n < size ? buff.n : size;
+        if (n > 0)
+            newbuff.set(buff.buffer.subarray(0, n));
+    }
     buff.buffer = newbuff;
 };
 

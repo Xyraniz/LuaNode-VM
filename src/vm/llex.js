@@ -167,7 +167,14 @@ class LexState {
 const save = function(ls, c) {
     let b = ls.buff;
     if (b.n + 1 > b.buffer.length) {
-        if (b.buffer.length >= MAX_INT/2)
+        /* MAX_INT is a BigInt (the real 2^63-1, see llimits.js), so the
+           "lexical element too long" guard must avoid mixing BigInt with a
+           plain JS Number under arithmetic — that throws TypeError and used
+           to silently kill the interpreter (status -1, no message) the first
+           time a token needed to grow past LUA_MINBUFFER (32 bytes), i.e.
+           for *any* string/identifier literal of ~31+ characters. Compare
+           in full BigInt so the check is exact and never raises. */
+        if (BigInt(b.buffer.length) >= MAX_INT / 2n)
             lexerror(ls, to_luastring("lexical element too long", true), 0);
         let newsize = b.buffer.length*2;
         luaZ_resizebuffer(ls.L, b, newsize);
