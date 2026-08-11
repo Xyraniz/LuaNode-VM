@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x, 22.x]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run tests
+        run: npm test
+
+  verify-64bit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install reference Lua 5.3
+        run: sudo apt-get update && sudo apt-get install -y lua5.3
+
+      - name: Verify 64-bit integer support
+        run: |
+          echo "=== LuaNode-VM ==="
+          node cli/luanode.js -e "print(math.maxinteger); print(math.mininteger); print(math.maxinteger + 1)"
+          echo "=== Reference Lua 5.3 ==="
+          lua5.3 -e "print(math.maxinteger); print(math.mininteger); print(math.maxinteger + 1)"
+
+      - name: Run 64-bit specific test suite
+        run: npx jest tests/int64.test.js tests/string-format.test.js tests/table-keys.test.js --verbose

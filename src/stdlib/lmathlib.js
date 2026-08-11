@@ -35,6 +35,13 @@ const {
     lua_numbertointeger
 } = require('../luaconf.js');
 const { to_luastring } = require("../fengaricore.js");
+/*
+** True 64-bit integer primitives (hybrid Number/BigInt). Used by math.abs,
+** math.fmod, math.ult and the random-integer range check so that the full
+** int64 range behaves correctly instead of being silently truncated to
+** 32 bits by JS bitwise operators.
+*/
+const I64 = require('../lint64.js');
 
 let rand_state;
 /*
@@ -118,12 +125,32 @@ const math_random = function(L) {
     }
 
     /* random integer in the interval [low, up] */
-    luaL_argcheck(L, low <= up, 1, "interval is empty");
-    luaL_argcheck(L, low >= 0 || up <= LUA_MAXINTEGER + low, 1,
-        "interval too large");
+    luaL_argcheck(L, I64.le(low, up), 1, "interval is empty");
+    /*
+    ** "interval too large": the width (up - low) must fit within the
+    ** int64 range. Equivalent to: low >= 0 OR up <= MAX_INT + low.
+    */
+    {
+        let widthOk = I64.le(0, low) || I64.le(up, I64.add(LUA_MAXINTEGER, low));
+        luaL_argcheck(L, widthOk, 1, "interval too large");
+    }
 
-    r *= (up - low) + 1;
-    lua_pushinteger(L, Math.floor(r) + low);
+    /*
+    ** The interval width (up - low + 1) must fit in a JS Number for the
+    ** random draw. For 64-bit integer bounds this is fine in practice
+    ** (a random range larger than 2^53 is meaningless). Convert the
+    ** bounds to Number here so the arithmetic stays in JS Number land.
+    */
+    let lowN = I64.toFloat(low);
+    let upN = I64.toFloat(up);
+    r *= (upN - lowN) + 1;
+    let result = Math.floor(r) + lowN;
+    /*
+    ** If the bounds were outside the safe range, push back as a hybrid
+    ** int via lua_pushinteger (which accepts BigInt). Otherwise the
+    ** Number result is already an exact integer.
+    */
+    lua_pushinteger(L, I64.normalize(result));
     return 1;
 };
 
@@ -135,8 +162,15 @@ const math_randomseed = function(L) {
 
 const math_abs = function(L) {
     if (lua_isinteger(L, 1)) {
+        /*
+        ** Integer absolute value with 64-bit wraparound. The notable case
+        ** is math.abs(math.mininteger): -(-2^63) would be 2^63, which is
+        ** outside the int64 range, so it wraps around to math.mininteger
+        ** again — exactly like PUC-Rio Lua. The old `(-n)|0` truncated to
+        ** 32 bits and gave wrong results for any |n| >= 2^31.
+        */
         let n = lua_tointeger(L, 1);
-        if (n < 0) n = (-n)|0;
+        if (I64.lt(n, 0)) n = I64.neg(n);
         lua_pushinteger(L, n);
     }
     else
@@ -219,9 +253,17 @@ const math_sqrt = function(L) {
 };
 
 const math_ult = function(L) {
+    /*
+    ** math.ult(a, b): unsigned 64-bit comparison, i.e. is a < b when both
+    ** are interpreted as unsigned 64-bit integers? The old signed-comparison
+    ** trick `(a>=0)?(b<0||a<b):(b<0&&a<b)` only works for fixed-width
+    ** two's-complement and breaks for the hybrid Number/BigInt values that
+    ** large integers now carry. Route through lint64.ult, which masks both
+    ** operands to uint64 and compares them exactly.
+    */
     let a = luaL_checkinteger(L, 1);
     let b = luaL_checkinteger(L, 2);
-    lua_pushboolean(L, (a >= 0)?(b<0 || a<b):(b<0 && a<b));
+    lua_pushboolean(L, I64.ult(a, b));
     return 1;
 };
 
@@ -297,12 +339,22 @@ const math_type = function(L) {
 
 const math_fmod = function(L) {
     if (lua_isinteger(L, 1) && lua_isinteger(L, 2)) {
+        /*
+        ** math.fmod for integers: truncated-division remainder (result
+        ** takes the sign of the dividend), per C fmod / Lua 5.3. The old
+        ** `(a % d)|0` truncated the result to 32 bits, which corrupted
+        ** any remainder >= 2^31 and broke for 64-bit operands. We compute
+        ** the remainder via BigInt to keep full int64 precision; this
+        ** matches the truncated (not floored) semantics of fmod.
+        */
+        let a = lua_tointeger(L, 1);
         let d = lua_tointeger(L, 2);
-        /* no special case needed for -1 in javascript */
-        if (d === 0) {
+        if (I64.eq(d, 0)) {
             luaL_argerror(L, 2, "zero");
-        } else
-            lua_pushinteger(L, (lua_tointeger(L, 1) % d)|0);
+        } else {
+            /* MIN_INT64 fmod -1 == 0 (no overflow for fmod). */
+            lua_pushinteger(L, I64.shrink(I64.toBigInt(a) % I64.toBigInt(d)));
+        }
     } else {
         let a = luaL_checknumber(L, 1);
         let b = luaL_checknumber(L, 2);

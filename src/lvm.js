@@ -82,6 +82,13 @@ const {
     lua_assert,
     luai_nummod
 } = require('./llimits.js');
+/*
+** True 64-bit integer arithmetic primitives (hybrid Number/BigInt with
+** two's-complement wraparound). Used for every integer op in the VM so
+** that math.maxinteger+1 == math.mininteger, large literals keep full
+** precision, and bitwise/shift ops work on the full int64 width.
+*/
+const I64 = require('./lint64.js');
 const lobject = require('./lobject.js');
 const lfunc   = require('./lfunc.js');
 const lstate  = require('./lstate.js');
@@ -277,7 +284,7 @@ const luaV_execute = function(L) {
                 let numberop1, numberop2;
 
                 if (op1.ttisinteger() && op2.ttisinteger()) {
-                    L.stack[ra].setivalue(op1.value + op2.value);
+                    L.stack[ra].setivalue(I64.add(op1.value, op2.value));
                 } else if ((numberop1 = tonumber(op1)) !== false && (numberop2 = tonumber(op2)) !== false) {
                     L.stack[ra].setfltvalue(numberop1 + numberop2);
                 } else {
@@ -291,7 +298,7 @@ const luaV_execute = function(L) {
                 let numberop1, numberop2;
 
                 if (op1.ttisinteger() && op2.ttisinteger()) {
-                    L.stack[ra].setivalue(op1.value - op2.value);
+                    L.stack[ra].setivalue(I64.sub(op1.value, op2.value));
                 } else if ((numberop1 = tonumber(op1)) !== false && (numberop2 = tonumber(op2)) !== false) {
                     L.stack[ra].setfltvalue(numberop1 - numberop2);
                 } else {
@@ -305,7 +312,7 @@ const luaV_execute = function(L) {
                 let numberop1, numberop2;
 
                 if (op1.ttisinteger() && op2.ttisinteger()) {
-                    L.stack[ra].setivalue(luaV_imul(op1.value, op2.value));
+                    L.stack[ra].setivalue(I64.mul(op1.value, op2.value));
                 } else if ((numberop1 = tonumber(op1)) !== false && (numberop2 = tonumber(op2)) !== false) {
                     L.stack[ra].setfltvalue(numberop1 * numberop2);
                 } else {
@@ -319,7 +326,10 @@ const luaV_execute = function(L) {
                 let numberop1, numberop2;
 
                 if (op1.ttisinteger() && op2.ttisinteger()) {
-                    L.stack[ra].setivalue(luaV_mod(L, op1.value, op2.value));
+                    let r = I64.imod(op1.value, op2.value);
+                    if (r === "divzero")
+                        ldebug.luaG_runerror(L, to_luastring("attempt to perform 'n%%0'"));
+                    L.stack[ra].setivalue(r);
                 } else if ((numberop1 = tonumber(op1)) !== false && (numberop2 = tonumber(op2)) !== false) {
                     L.stack[ra].setfltvalue(luai_nummod(L, numberop1, numberop2));
                 } else {
@@ -357,7 +367,12 @@ const luaV_execute = function(L) {
                 let numberop1, numberop2;
 
                 if (op1.ttisinteger() && op2.ttisinteger()) {
-                    L.stack[ra].setivalue(luaV_div(L, op1.value, op2.value));
+                    let r = I64.idiv(op1.value, op2.value);
+                    if (r === "divzero")
+                        ldebug.luaG_runerror(L, to_luastring("attempt to divide by zero"));
+                    else if (r === "overflow")
+                        ldebug.luaG_runerror(L, to_luastring("integer overflow"));
+                    L.stack[ra].setivalue(r);
                 } else if ((numberop1 = tonumber(op1)) !== false && (numberop2 = tonumber(op2)) !== false) {
                     L.stack[ra].setfltvalue(Math.floor(numberop1 / numberop2));
                 } else {
@@ -371,7 +386,7 @@ const luaV_execute = function(L) {
                 let numberop1, numberop2;
 
                 if ((numberop1 = tointeger(op1)) !== false && (numberop2 = tointeger(op2)) !== false) {
-                    L.stack[ra].setivalue(luaV_band(numberop1, numberop2));
+                    L.stack[ra].setivalue(I64.band(numberop1, numberop2));
                 } else {
                     ltm.luaT_trybinTM(L, op1, op2, L.stack[ra], ltm.TMS.TM_BAND);
                 }
@@ -383,7 +398,7 @@ const luaV_execute = function(L) {
                 let numberop1, numberop2;
 
                 if ((numberop1 = tointeger(op1)) !== false && (numberop2 = tointeger(op2)) !== false) {
-                    L.stack[ra].setivalue(luaV_bor(numberop1, numberop2));
+                    L.stack[ra].setivalue(I64.bor(numberop1, numberop2));
                 } else {
                     ltm.luaT_trybinTM(L, op1, op2, L.stack[ra], ltm.TMS.TM_BOR);
                 }
@@ -395,7 +410,7 @@ const luaV_execute = function(L) {
                 let numberop1, numberop2;
 
                 if ((numberop1 = tointeger(op1)) !== false && (numberop2 = tointeger(op2)) !== false) {
-                    L.stack[ra].setivalue(luaV_bxor(numberop1, numberop2));
+                    L.stack[ra].setivalue(I64.bxor(numberop1, numberop2));
                 } else {
                     ltm.luaT_trybinTM(L, op1, op2, L.stack[ra], ltm.TMS.TM_BXOR);
                 }
@@ -407,7 +422,7 @@ const luaV_execute = function(L) {
                 let numberop1, numberop2;
 
                 if ((numberop1 = tointeger(op1)) !== false && (numberop2 = tointeger(op2)) !== false) {
-                    L.stack[ra].setivalue(luaV_shiftl(numberop1, numberop2));
+                    L.stack[ra].setivalue(I64.shiftl(numberop1, numberop2));
                 } else {
                     ltm.luaT_trybinTM(L, op1, op2, L.stack[ra], ltm.TMS.TM_SHL);
                 }
@@ -419,7 +434,7 @@ const luaV_execute = function(L) {
                 let numberop1, numberop2;
 
                 if ((numberop1 = tointeger(op1)) !== false && (numberop2 = tointeger(op2)) !== false) {
-                    L.stack[ra].setivalue(luaV_shiftr(numberop1, numberop2));
+                    L.stack[ra].setivalue(I64.shiftr(numberop1, numberop2));
                 } else {
                     ltm.luaT_trybinTM(L, op1, op2, L.stack[ra], ltm.TMS.TM_SHR);
                 }
@@ -430,7 +445,7 @@ const luaV_execute = function(L) {
                 let numberop;
 
                 if (op.ttisinteger()) {
-                    L.stack[ra].setivalue(-op.value);
+                    L.stack[ra].setivalue(I64.neg(op.value));
                 } else if ((numberop = tonumber(op)) !== false) {
                     L.stack[ra].setfltvalue(-numberop);
                 } else {
@@ -442,7 +457,7 @@ const luaV_execute = function(L) {
                 let op = L.stack[RB(L, base, i)];
 
                 if (op.ttisinteger()) {
-                    L.stack[ra].setivalue(luaV_bnot(op.value));
+                    L.stack[ra].setivalue(I64.bnot(op.value));
                 } else {
                     ltm.luaT_trybinTM(L, op, op, L.stack[ra], ltm.TMS.TM_BNOT);
                 }
@@ -570,10 +585,10 @@ const luaV_execute = function(L) {
             case OP_FORLOOP: {
                 if (L.stack[ra].ttisinteger()) { /* integer loop? */
                     let step = L.stack[ra + 2].value;
-                    let idx = L.stack[ra].value + step;  /* no |0: preserve full 64-bit range */
+                    let idx = I64.add(L.stack[ra].value, step);  /* 64-bit wraparound */
                     let limit = L.stack[ra + 1].value;
 
-                    if (0 < step ? idx <= limit : limit <= idx) {
+                    if (I64.lt(0, step) ? I64.le(idx, limit) : I64.le(limit, idx)) {
                         ci.l_savedpc += i.sBx;
                         L.stack[ra].chgivalue(idx);  /* update internal index... */
                         L.stack[ra + 3].setivalue(idx);
@@ -601,7 +616,7 @@ const luaV_execute = function(L) {
                     /* all values are integer */
                     let initv = forlim.stopnow ? 0 : init.value;
                     plimit.value = forlim.ilimit;
-                    init.value = initv - pstep.value;  /* no |0: preserve full 64-bit range */
+                    init.value = I64.sub(initv, pstep.value);  /* 64-bit wraparound */
                 } else { /* try making all values floats */
                     let nlimit, nstep, ninit;
                     if ((nlimit = tonumber(plimit)) === false)
@@ -745,9 +760,15 @@ const luaV_equalobj = function(L, t1, t2) {
     if (t1.ttype() !== t2.ttype()) { /* not the same variant? */
         if (t1.ttnov() !== t2.ttnov() || t1.ttnov() !== LUA_TNUMBER)
             return 0; /* only numbers can be equal with different variants */
-        else { /* two numbers with different variants */
-            /* OPTIMIZATION: instead of calling luaV_tointeger we can just let JS do the comparison */
-            return (t1.value === t2.value) ? 1 : 0;
+        else { /* two numbers with different variants (int vs float) */
+            /*
+            ** An integer and a float are equal iff they have the same
+            ** mathematical value. The integer may be a BigInt (outside the
+            ** safe range); route through lint64.eq which handles the
+            ** Number/BigInt mix correctly (=== would always be false
+            ** across the two JS types).
+            */
+            return I64.eq(t1.value, t2.value) ? 1 : 0;
         }
     }
 
@@ -761,6 +782,12 @@ const luaV_equalobj = function(L, t1, t2) {
             return t1.value == t2.value ? 1 : 0; // Might be 1 or true
         case LUA_TLIGHTUSERDATA:
         case LUA_TNUMINT:
+            /*
+            ** Two integers: both could be Number, both BigInt, or one of
+            ** each (same value, different representation). === would miss
+            ** the mixed case, so use lint64.eq.
+            */
+            return I64.eq(t1.value, t2.value) ? 1 : 0;
         case LUA_TNUMFLT:
         case LUA_TLCF:
             return t1.value === t2.value ? 1 : 0;
@@ -851,13 +878,24 @@ const tointeger = function(o) {
 };
 
 const tonumber = function(o) {
-    if (o.ttnov() === LUA_TNUMBER)
-        return o.value;
+    if (o.ttnov() === LUA_TNUMBER) {
+        /*
+        ** For floats this is a JS Number already. For integers it may be a
+        ** BigInt (values outside the safe range); callers of tonumber use
+        ** the result in *float* arithmetic, so promote BigInts to Number
+        ** here. This matches PUC-Rio Lua, where an integer coerced to a
+        ** float loses precision if it cannot be represented exactly.
+        */
+        return o.ttisinteger() ? I64.toFloat(o.value) : o.value;
+    }
 
     if (cvt2num(o)) {  /* string convertible to number? */
         let v = new lobject.TValue();
-        if (lobject.luaO_str2num(o.svalue(), v) === (o.vslen() + 1))
-            return v.value;
+        if (lobject.luaO_str2num(o.svalue(), v) === (o.vslen() + 1)) {
+            /* Same promotion: a string that parsed as an integer must still
+               be returned as a float-usable Number. */
+            return v.ttisinteger() ? I64.toFloat(v.value) : v.value;
+        }
     }
 
     return false;
@@ -865,10 +903,14 @@ const tonumber = function(o) {
 
 /*
 ** Return 'l < r', for numbers.
-** As fengari uses javascript numbers for both floats and integers and has
-** correct semantics, we can just compare values.
+** Integers may be stored as BigInt (outside the safe range) or as Number;
+** JS comparison operators order Number and BigInt correctly, but to be
+** explicit and robust we route through lint64 when either side is a
+** hybrid integer. Floats compare with the native operator.
 */
 const LTnum = function(l, r) {
+    if (typeof l.value === "bigint" || typeof r.value === "bigint")
+        return I64.lt(l.value, r.value);
     return l.value < r.value;
 };
 
@@ -876,6 +918,8 @@ const LTnum = function(l, r) {
 ** Return 'l <= r', for numbers.
 */
 const LEnum = function(l, r) {
+    if (typeof l.value === "bigint" || typeof r.value === "bigint")
+        return I64.le(l.value, r.value);
     return l.value <= r.value;
 };
 
@@ -923,125 +967,47 @@ const luaV_objlen = function(L, ra, rb) {
     ltm.luaT_callTM(L, tm, rb, rb, ra, 1);
 };
 
-const luaV_imul = function(a, b) {
-    return a * b;
-};
-
 /*
-** Integer division (//) with Lua 5.3 semantics.
-** Lua defines integer division as floor(m / n) but also requires an error
-** when the result would overflow. The only overflowing case in true 64-bit
-** arithmetic is LUA_MININTEGER / -1 (whose positive counterpart 2^63 cannot
-** be represented as an int64). With our 53-bit-safe integer range,
-** -LUA_MININTEGER === LUA_MAXINTEGER exactly, so this overflow cannot occur;
-** the guard is kept for correctness and forward-compatibility with BigInt.
-** See lvm.c in PUC-Rio Lua 5.3.
-*/
-const luaV_div = function(L, m, n) {
-    if (n === 0)
-        ldebug.luaG_runerror(L, to_luastring("attempt to divide by zero"));
-    if (m === LUA_MININTEGER && n === -1 && -LUA_MININTEGER > LUA_MAXINTEGER)
-        ldebug.luaG_runerror(L, to_luastring("integer overflow"));
-    return Math.floor(m / n);
-};
-
-/*
-** Integer modulo (%) with Lua 5.3 semantics: the result has the same sign
-** as the divisor, and m == (m//n)*n + (m%n). JS's % operator gives a result
-** with the sign of the dividend, so we use m - floor(m/n)*n instead.
-** Note: LUA_MININTEGER % -1 is well-defined as 0 (no overflow here).
-*/
-const luaV_mod = function(L, m, n) {
-    if (n === 0)
-        ldebug.luaG_runerror(L, to_luastring("attempt to perform 'n%%0'"));
-    return m - Math.floor(m / n) * n;
-};
-
-/*
-** 64-bit integer bitwise & shift operations.
+** Integer arithmetic & bitwise helpers.
 **
-** JavaScript's native &, |, ^, ~, << and >>> operators coerce their
-** operands to 32-bit signed integers, so they cannot be used directly
-** for Lua's 64-bit lua_Integer semantics. Instead we split each operand
-** into a signed 32-bit "high" word and an unsigned 32-bit "low" word,
-** perform the operation word-by-word, and recombine the result as
-** high * 2^32 + low. This preserves exact results for every value in
-** the safe-integer range [-2^53+1, 2^53-1] that LuaNode-VM admits.
+** These used to be hand-rolled 32-bit-word-splitting implementations that
+** only worked inside the JS safe-integer range (and therefore could not
+** deliver true 64-bit semantics). They are now thin wrappers around the
+** lint64 module so that every code path — VM opcodes, constant folding in
+** lobject.intarith, and any external caller — agrees on real int64
+** arithmetic with two's-complement wraparound modulo 2^64.
+**
+** The error-raaising helpers (luaV_div, luaV_mod) keep their original
+** signatures (taking the lua_State L so they can raise a Lua error) for
+** backward compatibility with any caller that does not yet use lint64
+** directly.
 */
-const TWO_POW_32 = 0x100000000; /* 2^32 */
-
-/* Split a (possibly negative) JS Number into [high32 signed, low32 unsigned]. */
-const split64 = (n) => {
-    /* For negative numbers, work in two's-complement via the unsigned view. */
-    let lo = n >>> 0;            /* low 32 bits, unsigned */
-    let hi = (n - lo) / TWO_POW_32 | 0; /* high 32 bits, signed */
-    return [hi, lo];
+const luaV_imul = function(a, b) {
+    return I64.mul(a, b);
 };
 
-/* Recombine signed-high + unsigned-low into a JS Number. */
-const join64 = (hi, lo) => hi * TWO_POW_32 + lo;
-
-/*
-** Logical (unsigned) right shift of a 64-bit value by `y` bits.
-** Used internally by luaV_shiftl for negative shift amounts.
-*/
-const luaV_shiftr = function(x, y) {
-    if (y <= 0) {
-        if (y === 0) return x;
-        return luaV_shiftl(x, -y); /* left shift */
-    }
-    if (y >= 64) return 0;
-    let [hi, lo] = split64(x);
-    if (y >= 32) {
-        /* all low bits gone; high bits shift down into the result */
-        return hi >>> (y - 32);
-    }
-    /* combine bits from high and low */
-    let newLo = ((hi << (32 - y)) >>> 0) | (lo >>> y);
-    let newHi = hi >>> y;
-    return join64(newHi, newLo);
+const luaV_div = function(L, m, n) {
+    let r = I64.idiv(m, n);
+    if (r === "divzero")
+        ldebug.luaG_runerror(L, to_luastring("attempt to divide by zero"));
+    else if (r === "overflow")
+        ldebug.luaG_runerror(L, to_luastring("integer overflow"));
+    return r;
 };
 
-const luaV_shiftl = function(x, y) {
-    if (y < 0)  /* shift right? */
-        return luaV_shiftr(x, -y);
-    if (y === 0)
-        return x;
-    if (y >= 64)
-        return 0;
-    let [hi, lo] = split64(x);
-    if (y >= 32) {
-        let newHi = lo << (y - 32);
-        return join64(newHi, 0);
-    }
-    let newHi = (hi << y) | (lo >>> (32 - y));
-    let newLo = (lo << y) >>> 0;
-    return join64(newHi, newLo);
+const luaV_mod = function(L, m, n) {
+    let r = I64.imod(m, n);
+    if (r === "divzero")
+        ldebug.luaG_runerror(L, to_luastring("attempt to perform 'n%%0'"));
+    return r;
 };
 
-/* 64-bit bitwise helpers used by the VM and by lobject.intarith. */
-const luaV_band = function(a, b) {
-    let [ah, al] = split64(a);
-    let [bh, bl] = split64(b);
-    return join64(ah & bh, (al & bl) >>> 0);
-};
-
-const luaV_bor = function(a, b) {
-    let [ah, al] = split64(a);
-    let [bh, bl] = split64(b);
-    return join64(ah | bh, (al | bl) >>> 0);
-};
-
-const luaV_bxor = function(a, b) {
-    let [ah, al] = split64(a);
-    let [bh, bl] = split64(b);
-    return join64(ah ^ bh, (al ^ bl) >>> 0);
-};
-
-const luaV_bnot = function(a) {
-    let [hi, lo] = split64(a);
-    return join64(~hi, (~lo) >>> 0);
-};
+const luaV_band   = function(a, b) { return I64.band(a, b); };
+const luaV_bor    = function(a, b) { return I64.bor(a, b); };
+const luaV_bxor   = function(a, b) { return I64.bxor(a, b); };
+const luaV_bnot   = function(a)    { return I64.bnot(a); };
+const luaV_shiftl = function(x, y) { return I64.shiftl(x, y); };
+const luaV_shiftr = function(x, y) { return I64.shiftr(x, y); };
 
 /*
 ** check whether cached closure in prototype 'p' may be reused, that is,

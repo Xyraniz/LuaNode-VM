@@ -67,15 +67,18 @@ const fengari_argcheck = function(c) {
 
 const fengari_argcheckinteger = function(n) {
     /*
-    ** Accept any value that JavaScript can represent as an exact integer,
-    ** i.e. a finite number with no fractional part within the safe-integer
-    ** range. The previous check `(n|0) === n` only admitted 32-bit values,
-    ** which made math.maxinteger/math.mininteger (now 64-bit-wide) fail to
-    ** push onto the stack. Number.isSafeInteger covers [-2^53+1, 2^53-1];
-    ** we additionally accept the exact boundary values MAX/MIN_SAFE_INTEGER
-    ** which isSafeInteger already includes.
+    ** Accept any value that is part of LuaNode-VM's hybrid integer
+    ** representation: a JS Number that is an exact integer (within or,
+    ** for legacy callers, beyond the safe range), *or* a BigInt.
+    **
+    ** The previous check `(n|0) === n` only admitted 32-bit values, which
+    ** made math.maxinteger/math.mininteger fail to push onto the stack.
+    ** The 53-bit revision admitted safe integers but still rejected the
+    ** true int64 extremes (2^63-1 / -2^63), which are BigInts in the
+    ** hybrid representation. lint64.isIntRep covers both cases.
     */
-    fengari_argcheck(typeof n === "number" && Number.isInteger(n));
+    const { isIntRep } = require('./lint64.js');
+    fengari_argcheck(isIntRep(n));
 };
 
 const isvalid = function(o) {

@@ -67,6 +67,8 @@ const {
     luai_nummod,
     lua_assert
 } = require("./llimits.js");
+/* True 64-bit integer primitives (hybrid Number/BigInt with wraparound). */
+const I64 = require('./lint64.js');
 const ltm     = require('./ltm.js');
 
 const LUA_TPROTO = LUA_NUMTAGS;
@@ -533,48 +535,58 @@ const l_str2d = function(s) {
 };
 
 /*
-** Overflow thresholds for string->integer conversion.
+** String -> integer conversion with full int64 range.
 **
-** MAXBY10 is the largest integer that can be multiplied by 10 without
-** exceeding LUA_MAXINTEGER; MAXLASTD is the largest final digit that
-** can be added without overflowing. Both now reflect the 64-bit-wide
-** safe-integer range instead of the old 32-bit limit.
+** The previous implementation accumulated the value in a JS Number and
+** used MAXBY10/MAXLASTD overflow thresholds derived from the (then
+** 53-bit-wide) LUA_MAXINTEGER. That limited parsed integers to the safe
+** range and silently rejected everything above 2^53 — so a literal like
+** 9223372036854775807 (2^63-1) could not be read as an integer at all.
+**
+** We now accumulate in a BigInt, which has arbitrary precision, and reject
+** only values that fall outside the real int64 span [LUA_MININTEGER,
+** LUA_MAXINTEGER]. The result is then handed to lint64.shrink so that
+** values inside the safe range come back as a fast Number and only the
+** genuinely large ones stay as BigInt. This matches PUC-Rio Lua, where
+** every integer literal up to 2^63-1 parses exactly as an integer.
 */
-const MAXBY10  = Math.floor(LUA_MAXINTEGER / 10);
-const MAXLASTD = LUA_MAXINTEGER % 10;
-
 const l_str2int = function(s) {
     let i = 0;
-    let a = 0;
     let empty = true;
     let neg;
 
     while (lisspace(s[i])) i++;  /* skip initial spaces */
     if ((neg = (s[i] === 45 /* ('-').charCodeAt(0) */))) i++;
     else if (s[i] === 43 /* ('+').charCodeAt(0) */) i++;
+
+    let a = 0n;  /* BigInt accumulator */
+
     if (s[i] === 48 /* ('0').charCodeAt(0) */ && (s[i+1] === 120 /* ('x').charCodeAt(0) */ || s[i+1] === 88 /* ('X').charCodeAt(0) */)) {  /* hex? */
         i += 2;  /* skip '0x' */
         for (; i < s.length && lisxdigit(s[i]); i++) {
-            /* guard against overflow beyond the safe-integer range */
-            if (a > (LUA_MAXINTEGER - luaO_hexavalue(s[i])) / 16)
-                return null;  /* do not accept it (as integer) */
-            a = a * 16 + luaO_hexavalue(s[i]);
+            a = a * 16n + BigInt(luaO_hexavalue(s[i]));
             empty = false;
         }
     } else {  /* decimal */
         for (; i < s.length && lisdigit(s[i]); i++) {
-            let d = s[i] - 48 /* ('0').charCodeAt(0) */;
-            if (a >= MAXBY10 && (a > MAXBY10 || d > MAXLASTD + (neg ? 1 : 0)))  /* overflow? */
-                return null;  /* do not accept it (as integer) */
-            a = a * 10 + d;
+            a = a * 10n + BigInt(s[i] - 48 /* ('0').charCodeAt(0) */);
             empty = false;
         }
     }
+
+    if (neg) a = -a;
+
+    /* Reject anything outside the real int64 range. LUA_MAXINTEGER and
+       LUA_MININTEGER are BigInts (the true 2^63-1 / -2^63), so this compare
+       is exact. */
+    if (a > I64.MAX_INT64 || a < I64.MIN_INT64)
+        return null;  /* out of int64 range: do not accept as integer */
+
     while (i < s.length && lisspace(s[i])) i++;  /* skip trailing spaces */
     if (empty || (i !== s.length && s[i] !== 0)) return null;  /* something wrong in the numeral */
     else {
         return {
-            n: neg ? -a : a,
+            n: I64.shrink(a),
             i: i
         };
     }
@@ -746,20 +758,36 @@ const luaO_int2fb = function(x) {
 };
 
 const intarith = function(L, op, v1, v2) {
+    /*
+    ** Integer arithmetic for the luaO_arith / constant-folding path.
+    ** All operations go through lint64 so that the full 64-bit range is
+    ** supported with two's-complement wraparound, matching the VM opcodes.
+    */
     switch (op) {
-        case LUA_OPADD:  return v1 + v2;
-        case LUA_OPSUB:  return v1 - v2;
-        case LUA_OPMUL:  return lvm.luaV_imul(v1, v2);
-        case LUA_OPMOD:  return lvm.luaV_mod(L, v1, v2);
-        case LUA_OPIDIV: return lvm.luaV_div(L, v1, v2);
-        /* 64-bit bitwise ops (JS native operators are 32-bit only) */
-        case LUA_OPBAND: return lvm.luaV_band(v1, v2);
-        case LUA_OPBOR:  return lvm.luaV_bor(v1, v2);
-        case LUA_OPBXOR: return lvm.luaV_bxor(v1, v2);
-        case LUA_OPSHL:  return lvm.luaV_shiftl(v1, v2);
-        case LUA_OPSHR:  return lvm.luaV_shiftr(v1, v2);
-        case LUA_OPUNM:  return 0 - v1;
-        case LUA_OPBNOT: return lvm.luaV_bnot(v1);
+        case LUA_OPADD:  return I64.add(v1, v2);
+        case LUA_OPSUB:  return I64.sub(v1, v2);
+        case LUA_OPMUL:  return I64.mul(v1, v2);
+        case LUA_OPMOD: {
+            let r = I64.imod(v1, v2);
+            if (r === "divzero")
+                ldebug.luaG_runerror(L, to_luastring("attempt to perform 'n%%0'"));
+            return r;
+        }
+        case LUA_OPIDIV: {
+            let r = I64.idiv(v1, v2);
+            if (r === "divzero")
+                ldebug.luaG_runerror(L, to_luastring("attempt to divide by zero"));
+            else if (r === "overflow")
+                ldebug.luaG_runerror(L, to_luastring("integer overflow"));
+            return r;
+        }
+        case LUA_OPBAND: return I64.band(v1, v2);
+        case LUA_OPBOR:  return I64.bor(v1, v2);
+        case LUA_OPBXOR: return I64.bxor(v1, v2);
+        case LUA_OPSHL:  return I64.shiftl(v1, v2);
+        case LUA_OPSHR:  return I64.shiftr(v1, v2);
+        case LUA_OPUNM:  return I64.neg(v1);
+        case LUA_OPBNOT: return I64.bnot(v1);
         default: lua_assert(0);
     }
 };

@@ -15,6 +15,7 @@ const {
     luastring_eq,
     to_luastring
 } = require('./defs.js');
+const I64 = require('./lint64.js');
 const ldo      = require('./ldo.js');
 const lfunc    = require('./lfunc.js');
 const lobject  = require('./lobject.js');
@@ -101,15 +102,11 @@ class BytecodeParser {
         if (luaZ_read(this.Z, this.u8, 0, this.integerSize) !== 0)
             this.error("truncated");
         /*
-        ** Reconstruct a 64-bit-safe integer from two little-endian 32-bit
-        ** halves. The low word is read as an unsigned 32-bit value and the
-        ** high word as a signed 32-bit value, then combined as
-        ** high * 2^32 + low. This matches DumpInteger in ldump.js and
-        ** preserves every integer in [-2^53+1, 2^53-1] exactly.
+        ** Reconstruct a hybrid int64 from 8 little-endian bytes using
+        ** I64.fromBytesLE, which handles the full int64 range via BigInt
+        ** and returns a Number when the value fits the safe-integer range.
         */
-        let low = this.dv.getUint32(0, true);
-        let high = this.dv.getInt32(4, true);
-        return high * 0x100000000 + low;
+        return I64.fromBytesLE(this.u8);
     }
 
     LoadSize_t() {

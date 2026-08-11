@@ -129,21 +129,36 @@ if (typeof process === "undefined") {
 const LUA_COMPAT_FLOATSTRING = conf.LUA_COMPAT_FLOATSTRING || false;
 
 /*
-** Lua 5.3 specifies that lua_Integer is a signed integer type with at
-** least 64 bits. The original Fengari limited this to 32 bits because it
-** relied on DataView.setInt32/getInt32 for bytecode (de)serialization.
+** Lua 5.3 specifies that lua_Integer is a signed integer type with *at
+** least* 64 bits. PUC-Rio Lua uses int64_t, so the canonical limits are:
 **
-** LuaNode-VM upgrades the integer width to the full range that JavaScript
-** Numbers can represent exactly: 2^53 - 1 .. -(2^53 - 1). This matches
-** what the upstream Lua 5.3 test-suite expects (math.maxinteger is
-** 9007199254740991, string.format("%d", 2^53) == "9007199254740992",
-** etc.) while staying within IEEE-754 safe-integer territory so that no
-** precision is lost during arithmetic. The bytecode format has been
-** widened accordingly (see ldump.js / lundump.js) so Lua integers are
-** serialized as 8 bytes instead of 4.
+**     LUA_MAXINTEGER ==  9223372036854775807   (2^63 - 1)
+**     LUA_MININTEGER == -9223372036854775808   (-2^63)
+**
+** The original Fengari limited lua_Integer to 32 bits (it relied on
+** DataView.setInt32/getInt32). An earlier revision of LuaNode-VM widened
+** that to 53 bits (Number.MAX_SAFE_INTEGER) and *called* it "64-bit", but
+** that was incorrect: 2^53-1 is not 2^63-1, integer overflow did not wrap
+** around, and literals above 2^53 silently lost precision.
+**
+** LuaNode-VM now implements *true* 64-bit integers via a hybrid
+** Number/BigInt representation (see src/lint64.js). Values inside the
+** JavaScript safe-integer range [-2^53+1, 2^53-1] are stored as a plain
+** Number (zero-overhead fast path, identical to Fengari for the common
+** case); values outside that range — up to the full int64 span — are
+** stored as a BigInt, which represents every int64 exactly. All
+** arithmetic performs two's-complement wraparound modulo 2^64, matching
+** PUC-Rio Lua semantics (e.g. math.maxinteger + 1 == math.mininteger).
+**
+** The public limits below are exposed to Lua as math.maxinteger /
+** math.mininteger. They are the *real* int64 extremes. Because they lie
+** outside the JS safe-integer range they are carried as BigInt values;
+** lua_pushinteger / fengari_argcheckinteger have been updated to accept
+** the hybrid representation so they can be pushed onto the stack verbatim.
 */
-const LUA_MAXINTEGER = Number.MAX_SAFE_INTEGER; /*  9007199254740991 */
-const LUA_MININTEGER = -Number.MAX_SAFE_INTEGER; /* -9007199254740991 */
+const { MAX_INT64, MIN_INT64, shrink } = require('./lint64.js');
+const LUA_MAXINTEGER = shrink(MAX_INT64); /*  9223372036854775807n — BigInt, the real 2^63-1 */
+const LUA_MININTEGER = shrink(MIN_INT64); /* -9223372036854775808n — BigInt, the real -2^63  */
 
 /*
 @@ LUAI_MAXSTACK limits the size of the Lua stack.
@@ -160,16 +175,63 @@ const LUAI_MAXSTACK = conf.LUAI_MAXSTACK || 1000000;
 */
 const LUA_IDSIZE = conf.LUA_IDSIZE || (60-1); /* fengari uses 1 less than lua as we don't embed the null byte */
 
+const { toDecimalString, fromFloat } = require('./lint64.js');
+
 const lua_integer2str = function(n) {
-    return String(n); /* should match behaviour of LUA_INTEGER_FMT */
+    /* Hybrid int (Number or BigInt) -> exact decimal string.
+       This matches the behaviour of LUA_INTEGER_FMT ("%d") in PUC-Rio Lua. */
+    return toDecimalString(n);
 };
 
 const lua_number2str = function(n) {
-    return String(Number(n.toPrecision(14))); /* should match behaviour of LUA_NUMBER_FMT */
+    /* Emulate C's printf("%.14g", n) to match PUC-Rio Lua output exactly.
+       %.14g uses at most 14 significant digits and switches to scientific
+       notation when the exponent is < -4 or >= 14. */
+    if (n === Infinity) return "inf";
+    if (n === -Infinity) return "-inf";
+    if (Number.isNaN(n)) return "nan";
+    if (n === 0) return Object.is(n, -0) ? "-0" : "0";
+
+    let neg = n < 0;
+    let abs = Math.abs(n);
+    let exp = Math.floor(Math.log10(abs));
+    let precision = 14;
+
+    /* %.14g: use scientific if exp < -4 or exp >= precision */
+    if (exp < -4 || exp >= precision) {
+        /* Scientific notation: d.dddddddddddddde[+-]dd (14 sig digits total) */
+        let mantissa = abs / Math.pow(10, exp);
+        let mantStr = mantissa.toPrecision(precision);
+        mantStr = stripTrailingZeros(mantStr);
+        let expStr;
+        if (exp >= 0) expStr = (exp < 10) ? "+0" + exp : "+" + exp;
+        else expStr = (exp > -10) ? "-0" + Math.abs(exp) : String(exp);
+        return (neg ? "-" : "") + mantStr + "e" + expStr;
+    } else {
+        /* Fixed notation: use up to 14 significant digits */
+        let str = abs.toPrecision(precision);
+        str = stripTrailingZeros(str);
+        return (neg ? "-" : "") + str;
+    }
 };
 
+const stripTrailingZeros = function(s) {
+    if (s.indexOf(".") >= 0) {
+        s = s.replace(/0+$/, "").replace(/\.$/, "");
+    }
+    return s;
+};
+
+/*
+** Convert a JS float to a lua_Integer using Lua 5.3 "numbertointeger"
+** semantics: the float must have an integral value that fits in an int64.
+** Returns the (hybrid) integer value, or false if it does not fit / is not
+** integral. The hybrid representation is produced by lint64.fromFloat with
+** the strict (mode 0) rounding mode.
+*/
 const lua_numbertointeger = function(n) {
-    return n >= LUA_MININTEGER && n < -LUA_MININTEGER ? n : false;
+    let r = fromFloat(n, 0);
+    return r === null ? false : r;
 };
 
 const LUA_INTEGER_FRMLEN = "";
