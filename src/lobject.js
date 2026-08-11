@@ -56,6 +56,7 @@ const {
 const ltable  = require('./ltable.js');
 const {
     LUA_COMPAT_FLOATSTRING,
+    LUA_MAXINTEGER,
     ldexp,
     lua_integer2str,
     lua_number2str
@@ -531,8 +532,16 @@ const l_str2d = function(s) {
     return end;
 };
 
-const MAXBY10  = Math.floor(MAX_INT / 10);
-const MAXLASTD = MAX_INT % 10;
+/*
+** Overflow thresholds for string->integer conversion.
+**
+** MAXBY10 is the largest integer that can be multiplied by 10 without
+** exceeding LUA_MAXINTEGER; MAXLASTD is the largest final digit that
+** can be added without overflowing. Both now reflect the 64-bit-wide
+** safe-integer range instead of the old 32-bit limit.
+*/
+const MAXBY10  = Math.floor(LUA_MAXINTEGER / 10);
+const MAXLASTD = LUA_MAXINTEGER % 10;
 
 const l_str2int = function(s) {
     let i = 0;
@@ -546,15 +555,18 @@ const l_str2int = function(s) {
     if (s[i] === 48 /* ('0').charCodeAt(0) */ && (s[i+1] === 120 /* ('x').charCodeAt(0) */ || s[i+1] === 88 /* ('X').charCodeAt(0) */)) {  /* hex? */
         i += 2;  /* skip '0x' */
         for (; i < s.length && lisxdigit(s[i]); i++) {
-            a = (a * 16 + luaO_hexavalue(s[i]))|0;
+            /* guard against overflow beyond the safe-integer range */
+            if (a > (LUA_MAXINTEGER - luaO_hexavalue(s[i])) / 16)
+                return null;  /* do not accept it (as integer) */
+            a = a * 16 + luaO_hexavalue(s[i]);
             empty = false;
         }
     } else {  /* decimal */
         for (; i < s.length && lisdigit(s[i]); i++) {
             let d = s[i] - 48 /* ('0').charCodeAt(0) */;
-            if (a >= MAXBY10 && (a > MAXBY10 || d > MAXLASTD + neg))  /* overflow? */
+            if (a >= MAXBY10 && (a > MAXBY10 || d > MAXLASTD + (neg ? 1 : 0)))  /* overflow? */
                 return null;  /* do not accept it (as integer) */
-            a = (a * 10 + d)|0;
+            a = a * 10 + d;
             empty = false;
         }
     }
@@ -562,7 +574,7 @@ const l_str2int = function(s) {
     if (empty || (i !== s.length && s[i] !== 0)) return null;  /* something wrong in the numeral */
     else {
         return {
-            n: (neg ? -a : a)|0,
+            n: neg ? -a : a,
             i: i
         };
     }
@@ -740,13 +752,14 @@ const intarith = function(L, op, v1, v2) {
         case LUA_OPMUL:  return lvm.luaV_imul(v1, v2);
         case LUA_OPMOD:  return lvm.luaV_mod(L, v1, v2);
         case LUA_OPIDIV: return lvm.luaV_div(L, v1, v2);
-        case LUA_OPBAND: return (v1 & v2);
-        case LUA_OPBOR:  return (v1 | v2);
-        case LUA_OPBXOR: return (v1 ^ v2);
+        /* 64-bit bitwise ops (JS native operators are 32-bit only) */
+        case LUA_OPBAND: return lvm.luaV_band(v1, v2);
+        case LUA_OPBOR:  return lvm.luaV_bor(v1, v2);
+        case LUA_OPBXOR: return lvm.luaV_bxor(v1, v2);
         case LUA_OPSHL:  return lvm.luaV_shiftl(v1, v2);
-        case LUA_OPSHR:  return lvm.luaV_shiftl(v1, -v2);
+        case LUA_OPSHR:  return lvm.luaV_shiftr(v1, v2);
         case LUA_OPUNM:  return 0 - v1;
-        case LUA_OPBNOT: return (~0 ^ v1);
+        case LUA_OPBNOT: return lvm.luaV_bnot(v1);
         default: lua_assert(0);
     }
 };
