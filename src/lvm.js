@@ -371,7 +371,7 @@ const luaV_execute = function(L) {
                 let numberop1, numberop2;
 
                 if ((numberop1 = tointeger(op1)) !== false && (numberop2 = tointeger(op2)) !== false) {
-                    L.stack[ra].setivalue(numberop1 & numberop2);
+                    L.stack[ra].setivalue(luaV_band(numberop1, numberop2));
                 } else {
                     ltm.luaT_trybinTM(L, op1, op2, L.stack[ra], ltm.TMS.TM_BAND);
                 }
@@ -383,7 +383,7 @@ const luaV_execute = function(L) {
                 let numberop1, numberop2;
 
                 if ((numberop1 = tointeger(op1)) !== false && (numberop2 = tointeger(op2)) !== false) {
-                    L.stack[ra].setivalue(numberop1 | numberop2);
+                    L.stack[ra].setivalue(luaV_bor(numberop1, numberop2));
                 } else {
                     ltm.luaT_trybinTM(L, op1, op2, L.stack[ra], ltm.TMS.TM_BOR);
                 }
@@ -395,7 +395,7 @@ const luaV_execute = function(L) {
                 let numberop1, numberop2;
 
                 if ((numberop1 = tointeger(op1)) !== false && (numberop2 = tointeger(op2)) !== false) {
-                    L.stack[ra].setivalue(numberop1 ^ numberop2);
+                    L.stack[ra].setivalue(luaV_bxor(numberop1, numberop2));
                 } else {
                     ltm.luaT_trybinTM(L, op1, op2, L.stack[ra], ltm.TMS.TM_BXOR);
                 }
@@ -419,7 +419,7 @@ const luaV_execute = function(L) {
                 let numberop1, numberop2;
 
                 if ((numberop1 = tointeger(op1)) !== false && (numberop2 = tointeger(op2)) !== false) {
-                    L.stack[ra].setivalue(luaV_shiftl(numberop1, -numberop2));
+                    L.stack[ra].setivalue(luaV_shiftr(numberop1, numberop2));
                 } else {
                     ltm.luaT_trybinTM(L, op1, op2, L.stack[ra], ltm.TMS.TM_SHR);
                 }
@@ -442,7 +442,7 @@ const luaV_execute = function(L) {
                 let op = L.stack[RB(L, base, i)];
 
                 if (op.ttisinteger()) {
-                    L.stack[ra].setivalue(~op.value);
+                    L.stack[ra].setivalue(luaV_bnot(op.value));
                 } else {
                     ltm.luaT_trybinTM(L, op, op, L.stack[ra], ltm.TMS.TM_BNOT);
                 }
@@ -570,7 +570,7 @@ const luaV_execute = function(L) {
             case OP_FORLOOP: {
                 if (L.stack[ra].ttisinteger()) { /* integer loop? */
                     let step = L.stack[ra + 2].value;
-                    let idx = (L.stack[ra].value + step)|0;
+                    let idx = L.stack[ra].value + step;  /* no |0: preserve full 64-bit range */
                     let limit = L.stack[ra + 1].value;
 
                     if (0 < step ? idx <= limit : limit <= idx) {
@@ -601,7 +601,7 @@ const luaV_execute = function(L) {
                     /* all values are integer */
                     let initv = forlim.stopnow ? 0 : init.value;
                     plimit.value = forlim.ilimit;
-                    init.value = (initv - pstep.value)|0;
+                    init.value = initv - pstep.value;  /* no |0: preserve full 64-bit range */
                 } else { /* try making all values floats */
                     let nlimit, nstep, ninit;
                     if ((nlimit = tonumber(plimit)) === false)
@@ -927,30 +927,120 @@ const luaV_imul = function(a, b) {
     return a * b;
 };
 
+/*
+** Integer division (//) with Lua 5.3 semantics.
+** Lua defines integer division as floor(m / n) but also requires an error
+** when the result would overflow. The only overflowing case in true 64-bit
+** arithmetic is LUA_MININTEGER / -1 (whose positive counterpart 2^63 cannot
+** be represented as an int64). With our 53-bit-safe integer range,
+** -LUA_MININTEGER === LUA_MAXINTEGER exactly, so this overflow cannot occur;
+** the guard is kept for correctness and forward-compatibility with BigInt.
+** See lvm.c in PUC-Rio Lua 5.3.
+*/
 const luaV_div = function(L, m, n) {
     if (n === 0)
         ldebug.luaG_runerror(L, to_luastring("attempt to divide by zero"));
+    if (m === LUA_MININTEGER && n === -1 && -LUA_MININTEGER > LUA_MAXINTEGER)
+        ldebug.luaG_runerror(L, to_luastring("integer overflow"));
     return Math.floor(m / n);
 };
 
-// % semantic on negative numbers is different in js
+/*
+** Integer modulo (%) with Lua 5.3 semantics: the result has the same sign
+** as the divisor, and m == (m//n)*n + (m%n). JS's % operator gives a result
+** with the sign of the dividend, so we use m - floor(m/n)*n instead.
+** Note: LUA_MININTEGER % -1 is well-defined as 0 (no overflow here).
+*/
 const luaV_mod = function(L, m, n) {
     if (n === 0)
         ldebug.luaG_runerror(L, to_luastring("attempt to perform 'n%%0'"));
     return m - Math.floor(m / n) * n;
 };
 
-const NBITS = 32;
+/*
+** 64-bit integer bitwise & shift operations.
+**
+** JavaScript's native &, |, ^, ~, << and >>> operators coerce their
+** operands to 32-bit signed integers, so they cannot be used directly
+** for Lua's 64-bit lua_Integer semantics. Instead we split each operand
+** into a signed 32-bit "high" word and an unsigned 32-bit "low" word,
+** perform the operation word-by-word, and recombine the result as
+** high * 2^32 + low. This preserves exact results for every value in
+** the safe-integer range [-2^53+1, 2^53-1] that LuaNode-VM admits.
+*/
+const TWO_POW_32 = 0x100000000; /* 2^32 */
+
+/* Split a (possibly negative) JS Number into [high32 signed, low32 unsigned]. */
+const split64 = (n) => {
+    /* For negative numbers, work in two's-complement via the unsigned view. */
+    let lo = n >>> 0;            /* low 32 bits, unsigned */
+    let hi = (n - lo) / TWO_POW_32 | 0; /* high 32 bits, signed */
+    return [hi, lo];
+};
+
+/* Recombine signed-high + unsigned-low into a JS Number. */
+const join64 = (hi, lo) => hi * TWO_POW_32 + lo;
+
+/*
+** Logical (unsigned) right shift of a 64-bit value by `y` bits.
+** Used internally by luaV_shiftl for negative shift amounts.
+*/
+const luaV_shiftr = function(x, y) {
+    if (y <= 0) {
+        if (y === 0) return x;
+        return luaV_shiftl(x, -y); /* left shift */
+    }
+    if (y >= 64) return 0;
+    let [hi, lo] = split64(x);
+    if (y >= 32) {
+        /* all low bits gone; high bits shift down into the result */
+        return hi >>> (y - 32);
+    }
+    /* combine bits from high and low */
+    let newLo = ((hi << (32 - y)) >>> 0) | (lo >>> y);
+    let newHi = hi >>> y;
+    return join64(newHi, newLo);
+};
 
 const luaV_shiftl = function(x, y) {
-    if (y < 0) {  /* shift right? */
-        if (y <= -NBITS) return 0;
-        else return x >>> -y;
+    if (y < 0)  /* shift right? */
+        return luaV_shiftr(x, -y);
+    if (y === 0)
+        return x;
+    if (y >= 64)
+        return 0;
+    let [hi, lo] = split64(x);
+    if (y >= 32) {
+        let newHi = lo << (y - 32);
+        return join64(newHi, 0);
     }
-    else {  /* shift left */
-        if (y >= NBITS) return 0;
-        else return x << y;
-    }
+    let newHi = (hi << y) | (lo >>> (32 - y));
+    let newLo = (lo << y) >>> 0;
+    return join64(newHi, newLo);
+};
+
+/* 64-bit bitwise helpers used by the VM and by lobject.intarith. */
+const luaV_band = function(a, b) {
+    let [ah, al] = split64(a);
+    let [bh, bl] = split64(b);
+    return join64(ah & bh, (al & bl) >>> 0);
+};
+
+const luaV_bor = function(a, b) {
+    let [ah, al] = split64(a);
+    let [bh, bl] = split64(b);
+    return join64(ah | bh, (al | bl) >>> 0);
+};
+
+const luaV_bxor = function(a, b) {
+    let [ah, al] = split64(a);
+    let [bh, bl] = split64(b);
+    return join64(ah ^ bh, (al ^ bl) >>> 0);
+};
+
+const luaV_bnot = function(a) {
+    let [hi, lo] = split64(a);
+    return join64(~hi, (~lo) >>> 0);
 };
 
 /*
@@ -1142,6 +1232,11 @@ module.exports.luaV_mod         = luaV_mod;
 module.exports.luaV_objlen      = luaV_objlen;
 module.exports.luaV_rawequalobj = luaV_rawequalobj;
 module.exports.luaV_shiftl      = luaV_shiftl;
+module.exports.luaV_shiftr      = luaV_shiftr;
+module.exports.luaV_band        = luaV_band;
+module.exports.luaV_bor         = luaV_bor;
+module.exports.luaV_bxor        = luaV_bxor;
+module.exports.luaV_bnot        = luaV_bnot;
 module.exports.luaV_tointeger   = luaV_tointeger;
 module.exports.settable         = settable;
 module.exports.tointeger        = tointeger;
