@@ -48,7 +48,7 @@ class BytecodeParser {
         this.intSize = 4;
         this.size_tSize = 4;
         this.instructionSize = 4;
-        this.integerSize = 4;
+        this.integerSize = 8;  /* widened from 4 to support 64-bit Lua integers */
         this.numberSize = 8;
 
         lua_assert(Z instanceof ZIO, "BytecodeParser only operates on a ZIO");
@@ -100,7 +100,16 @@ class BytecodeParser {
     LoadInteger() {
         if (luaZ_read(this.Z, this.u8, 0, this.integerSize) !== 0)
             this.error("truncated");
-        return this.dv.getInt32(0, true);
+        /*
+        ** Reconstruct a 64-bit-safe integer from two little-endian 32-bit
+        ** halves. The low word is read as an unsigned 32-bit value and the
+        ** high word as a signed 32-bit value, then combined as
+        ** high * 2^32 + low. This matches DumpInteger in ldump.js and
+        ** preserves every integer in [-2^53+1, 2^53-1] exactly.
+        */
+        let low = this.dv.getUint32(0, true);
+        let high = this.dv.getInt32(4, true);
+        return high * 0x100000000 + low;
     }
 
     LoadSize_t() {
@@ -254,7 +263,7 @@ class BytecodeParser {
         this.checksize(this.intSize, 4, "int");
         this.checksize(this.size_tSize, 4, "size_t");
         this.checksize(this.instructionSize, 4, "instruction");
-        this.checksize(this.integerSize, 4, "integer");
+        this.checksize(this.integerSize, 8, "integer");  /* widened from 4 to 8 */
         this.checksize(this.numberSize, 8, "number");
 
         if (this.LoadInteger() !== 0x5678)
