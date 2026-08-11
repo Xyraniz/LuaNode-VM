@@ -48,12 +48,22 @@ const DumpInt = function(x, D) {
     DumpBlock(t, 4, D);
 };
 
+/*
+** DumpInteger serializes a Lua integer using 8 bytes (two little-endian
+** 32-bit halves: low then high). This widens the original 4-byte format
+** so that integers up to Number.MAX_SAFE_INTEGER (2^53-1) round-trip
+** exactly instead of being truncated to 32 bits. JavaScript Numbers can
+** represent every integer in [-2^53+1, 2^53-1] losslessly, so splitting
+** the value into low/high words via bitwise ops (which operate modulo
+** 2^32 on 32-bit signed ints) is sufficient for the supported range.
+*/
 const DumpInteger = function(x, D) {
-    let ab = new ArrayBuffer(4);
+    let ab = new ArrayBuffer(8);
     let dv = new DataView(ab);
-    dv.setInt32(0, x, true);
+    dv.setInt32(0, x | 0, true);          /* low 32 bits (signed) */
+    dv.setInt32(4, Math.floor(x / 0x100000000), true); /* high word */
     let t = new Uint8Array(ab);
-    DumpBlock(t, 4, D);
+    DumpBlock(t, 8, D);
 };
 
 const DumpNumber = function(x, D) {
@@ -173,7 +183,7 @@ const DumpHeader = function(D) {
     DumpByte(4, D); // intSize
     DumpByte(4, D); // size_tSize
     DumpByte(4, D); // instructionSize
-    DumpByte(4, D); // integerSize
+    DumpByte(8, D); // integerSize  (widened from 4 to support 64-bit Lua integers)
     DumpByte(8, D); // numberSize
     DumpInteger(LUAC_INT, D);
     DumpNumber(LUAC_NUM, D);
