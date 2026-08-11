@@ -3,7 +3,7 @@
 const {
     LUA_MULTRET,
     to_luastring
-} = require('./defs.js');
+} = require('../defs.js');
 const {
     BinOpr: {
         OPR_ADD,

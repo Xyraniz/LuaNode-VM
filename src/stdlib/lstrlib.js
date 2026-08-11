@@ -1,7 +1,7 @@
 "use strict";
 
 const { sprintf } = require('sprintf-js');
-const I64 = require('../lint64.js');
+const I64 = require('../vm/lint64.js');
 
 /*
 ** sprintf-js produces single-digit exponents (e.g. "1.2e+3") whereas C

@@ -1,10 +1,10 @@
 "use strict";
 
 const defs   = require("./defs.js");
-const lapi   = require("./lapi.js");
-const ldebug = require("./ldebug.js");
-const ldo    = require("./ldo.js");
-const lstate = require("./lstate.js");
+const lapi   = require("./vm/lapi.js");
+const ldebug = require("./vm/ldebug.js");
+const ldo    = require("./vm/ldo.js");
+const lstate = require("./vm/lstate.js");
 
 module.exports.LUA_AUTHORS             = defs.LUA_AUTHORS;
 module.exports.LUA_COPYRIGHT           = defs.LUA_COPYRIGHT;

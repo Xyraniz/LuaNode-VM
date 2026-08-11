@@ -39,7 +39,7 @@ const {
     luastring_of,
     to_jsstring,
     to_luastring
-} = require('./defs.js');
+} = require('../defs.js');
 const {
     lisdigit,
     lisprint,
@@ -60,7 +60,7 @@ const {
     ldexp,
     lua_integer2str,
     lua_number2str
-} = require('./luaconf.js');
+} = require('../luaconf.js');
 const lvm     = require('./lvm.js');
 const {
     MAX_INT,

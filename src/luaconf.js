@@ -156,7 +156,7 @@ const LUA_COMPAT_FLOATSTRING = conf.LUA_COMPAT_FLOATSTRING || false;
 ** lua_pushinteger / fengari_argcheckinteger have been updated to accept
 ** the hybrid representation so they can be pushed onto the stack verbatim.
 */
-const { MAX_INT64, MIN_INT64, shrink } = require('./lint64.js');
+const { MAX_INT64, MIN_INT64, shrink } = require('./vm/lint64.js');
 const LUA_MAXINTEGER = shrink(MAX_INT64); /*  9223372036854775807n — BigInt, the real 2^63-1 */
 const LUA_MININTEGER = shrink(MIN_INT64); /* -9223372036854775808n — BigInt, the real -2^63  */
 
@@ -175,7 +175,7 @@ const LUAI_MAXSTACK = conf.LUAI_MAXSTACK || 1000000;
 */
 const LUA_IDSIZE = conf.LUA_IDSIZE || (60-1); /* fengari uses 1 less than lua as we don't embed the null byte */
 
-const { toDecimalString, fromFloat } = require('./lint64.js');
+const { toDecimalString, fromFloat } = require('./vm/lint64.js');
 
 const lua_integer2str = function(n) {
     /* Hybrid int (Number or BigInt) -> exact decimal string.

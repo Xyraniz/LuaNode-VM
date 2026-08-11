@@ -5,7 +5,7 @@ const {
     luastring_eq,
     luastring_from,
     to_luastring
-} = require('./defs.js');
+} = require('../defs.js');
 const { lua_assert } = require("./llimits.js");
 
 /**

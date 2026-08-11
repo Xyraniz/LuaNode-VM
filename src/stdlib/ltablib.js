@@ -1,7 +1,7 @@
 "use strict";
 
 const { LUA_MAXINTEGER } = require('../luaconf.js');
-const I64 = require('../lint64.js');
+const I64 = require('../vm/lint64.js');
 const {
     LUA_OPEQ,
     LUA_OPLT,

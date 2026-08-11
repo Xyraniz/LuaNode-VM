@@ -41,7 +41,7 @@ const { to_luastring } = require("../fengaricore.js");
 ** int64 range behaves correctly instead of being silently truncated to
 ** 32 bits by JS bitwise operators.
 */
-const I64 = require('../lint64.js');
+const I64 = require('../vm/lint64.js');
 
 let rand_state;
 /*
