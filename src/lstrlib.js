@@ -410,7 +410,13 @@ const LUAL_PACKPADBYTE = 0x00;
 /* maximum size for the binary representation of an integer */
 const MAXINTSIZE = 16;
 
-const SZINT = 4; // Size of lua_Integer
+/*
+** Size of lua_Integer in bytes. Widened from 4 to 8 so that
+** string.pack("j", ...) / string.packsize("j") agree with the
+** 64-bit-wide lua_Integer exposed by math.maxinteger/math.mininteger
+** and with the bytecode (de)serialization in ldump.js/lundump.js.
+*/
+const SZINT = 8;
 
 /* number of bits in a character */
 const NB = 8;
@@ -484,8 +490,8 @@ const getoption = function(h, fmt) {
         case 72  /*'H'*/: r.size = 2; r.opt = Kuint;  return r;
         case 108 /*'l'*/: r.size = 4; r.opt = Kint;   return r; // sizeof(long): 4
         case 76  /*'L'*/: r.size = 4; r.opt = Kuint;  return r;
-        case 106 /*'j'*/: r.size = 4; r.opt = Kint;   return r; // sizeof(lua_Integer): 4
-        case 74  /*'J'*/: r.size = 4; r.opt = Kuint;  return r;
+        case 106 /*'j'*/: r.size = SZINT; r.opt = Kint;   return r; // sizeof(lua_Integer): SZINT (8)
+        case 74  /*'J'*/: r.size = SZINT; r.opt = Kuint;  return r;
         case 84  /*'T'*/: r.size = 4; r.opt = Kuint;  return r; // sizeof(size_t): 4
         case 102 /*'f'*/: r.size = 4; r.opt = Kfloat; return r; // sizeof(float): 4
         case 100 /*'d'*/: r.size = 8; r.opt = Kfloat; return r; // sizeof(double): 8
@@ -563,16 +569,36 @@ const getdetails = function(h, totalsize, fmt) {
 ** the size of a Lua integer, correcting the extra sign-extension
 ** bytes if necessary (by default they would be zeros).
 */
+/*
+** packint writes a (possibly negative) integer `n` into `b` using
+** `size` bytes in two's-complement little- or big-endian order.
+**
+** The original implementation used `n >>= NB` to walk through the bytes,
+** which only works for values that fit in a 32-bit JS bitwise operand.
+** Now that lua_Integer is 64-bit-wide (SZINT = 8) we must handle values
+** whose magnitude exceeds 2^31. We do this by splitting the value into
+** an unsigned 32-bit low word and a signed 32-bit high word and emitting
+** bytes from each word in turn, applying sign extension for negative
+** numbers beyond the high word when `size > 8`.
+*/
+const TWO_POW_32_STR = 0x100000000; /* 2^32 */
+
 const packint = function(b, n, islittle, size, neg) {
     let buff = luaL_prepbuffsize(b, size);
-    buff[islittle ? 0 : size - 1] = n & MC;  /* first byte */
-    for (let i = 1; i < size; i++) {
-        n >>= NB;
-        buff[islittle ? i : size - 1 - i] = n & MC;
-    }
-    if (neg && size > SZINT) {  /* negative number need sign extension? */
-        for (let i = SZINT; i < size; i++)  /* correct extra bytes */
-            buff[islittle ? i : size - 1 - i] = MC;
+    /* Split into low (unsigned 32) and high (signed 32) words. */
+    let lo = n >>> 0;
+    let hi = (n - lo) / TWO_POW_32_STR | 0;
+    for (let i = 0; i < size; i++) {
+        let byte;
+        if (i < 4) {
+            byte = (lo >> (i * NB)) & MC;
+        } else if (i < 8) {
+            byte = (hi >> ((i - 4) * NB)) & MC;
+        } else {
+            /* size > 8: sign-extend the remaining bytes */
+            byte = neg ? MC : 0;
+        }
+        buff[islittle ? i : size - 1 - i] = byte;
     }
     luaL_addsize(b, size);  /* add result to buffer */
 };
@@ -601,7 +627,9 @@ const str_pack = function(L) {
             case Kint: {  /* signed integers */
                 let n = luaL_checkinteger(L, arg);
                 if (size < SZINT) {  /* need overflow check? */
-                    let lim = 1 << (size * 8) - 1;
+                    /* limit = 2^(size*8 - 1); guard against 32-bit shift overflow */
+                    let bits = size * 8 - 1;
+                    let lim = bits < 31 ? (1 << bits) : (Math.pow(2, bits));
                     luaL_argcheck(L, -lim <= n && n < lim, arg, "integer overflow");
                 }
                 packint(b, n, h.islittle, size, n < 0);
@@ -609,9 +637,13 @@ const str_pack = function(L) {
             }
             case Kuint: {  /* unsigned integers */
                 let n = luaL_checkinteger(L, arg);
-                if (size < SZINT)
-                    luaL_argcheck(L, (n>>>0) < (1 << (size * NB)), arg, "unsigned overflow");
-                packint(b, n>>>0, h.islittle, size, false);
+                if (size < SZINT) {
+                    /* limit = 2^(size*8); guard against 32-bit shift overflow */
+                    let bits = size * 8;
+                    let lim = bits < 31 ? (1 << bits) : (Math.pow(2, bits));
+                    luaL_argcheck(L, 0 <= n && n < lim, arg, "unsigned overflow");
+                }
+                packint(b, n, h.islittle, size, false);
                 break;
             }
             case Kfloat: {  /* floating-point options */
@@ -782,26 +814,56 @@ const str_packsize = function(L) {
 ** it must check the unread bytes to see whether they do not cause an
 ** overflow.
 */
+/*
+** unpackint reads `size` bytes from `str` and returns the integer value.
+**
+** The original used `res <<= NB` / `res |= byte` in a loop, which
+** overflows once more than 4 bytes are accumulated (JS bitwise ops are
+** 32-bit). To support the full 64-bit-wide lua_Integer we accumulate the
+** low 4 bytes into an unsigned 32-bit word and the high 4 bytes into a
+** signed 32-bit word, then recombine as high * 2^32 + low. Sign
+** extension is applied when the real size is smaller than SZINT.
+*/
 const unpackint = function(L, str, islittle, size, issigned) {
-    let res = 0;
-    let limit = size <= SZINT ? size : SZINT;
-    for (let i = limit - 1; i >= 0; i--) {
-        res <<= NB;
-        res |= str[islittle ? i : size - 1 - i];
-    }
-    if (size < SZINT) {  /* real size smaller than lua_Integer? */
+    /* Fast path: values that fit comfortably in 32 bits. */
+    if (size <= 4) {
+        let res = 0;
+        for (let i = size - 1; i >= 0; i--) {
+            res <<= NB;
+            res |= str[islittle ? i : size - 1 - i];
+        }
         if (issigned) {  /* needs sign extension? */
             let mask = 1 << (size * NB - 1);
-            res = ((res ^ mask) - mask);  /* do sign extension */
+            res = ((res ^ mask) - mask);
+        } else {
+            /* unsigned: force into positive 32-bit range */
+            res = res >>> 0;
         }
-    } else if (size > SZINT) {  /* must check unread bytes */
-        let mask = !issigned || res >= 0 ? 0 : MC;
-        for (let i = limit; i < size; i++) {
+        return res;
+    }
+
+    /* 64-bit path: assemble high and low 32-bit words separately. */
+    let lo = 0;   /* unsigned 32-bit */
+    let hi = 0;   /* signed 32-bit   */
+    /* low word: bytes 0..3 */
+    for (let i = 3; i >= 0; i--) {
+        lo = (lo << NB) | str[islittle ? i : size - 1 - i];
+    }
+    lo = lo >>> 0; /* force unsigned */
+    /* high word: bytes 4..7 */
+    for (let i = 7; i >= 4; i--) {
+        hi = (hi << NB) | str[islittle ? i : size - 1 - i];
+    }
+    hi = hi | 0; /* force signed */
+
+    if (size > SZINT) {  /* must check unread bytes for consistency */
+        let mask = (!issigned || (hi < 0)) ? MC : 0;
+        for (let i = SZINT; i < size; i++) {
             if (str[islittle ? i : size - 1 - i] !== mask)
                 luaL_error(L, to_luastring("%d-byte integer does not fit into Lua Integer"), size);
         }
     }
-    return res;
+    return hi * TWO_POW_32_STR + lo;
 };
 
 const unpacknum = function(L, b, islittle, size) {
@@ -1230,7 +1292,7 @@ const reprepstate = function(ms) {
 };
 
 const find_subarray = function(arr, subarr, from_index) {
-    var i = from_index >>> 0,
+    let i = from_index >>> 0,
         sl = subarr.length;
 
     if (sl === 0)
