@@ -128,8 +128,22 @@ if (typeof process === "undefined") {
 */
 const LUA_COMPAT_FLOATSTRING = conf.LUA_COMPAT_FLOATSTRING || false;
 
-const LUA_MAXINTEGER = 2147483647;
-const LUA_MININTEGER = -2147483648;
+/*
+** Lua 5.3 specifies that lua_Integer is a signed integer type with at
+** least 64 bits. The original Fengari limited this to 32 bits because it
+** relied on DataView.setInt32/getInt32 for bytecode (de)serialization.
+**
+** LuaNode-VM upgrades the integer width to the full range that JavaScript
+** Numbers can represent exactly: 2^53 - 1 .. -(2^53 - 1). This matches
+** what the upstream Lua 5.3 test-suite expects (math.maxinteger is
+** 9007199254740991, string.format("%d", 2^53) == "9007199254740992",
+** etc.) while staying within IEEE-754 safe-integer territory so that no
+** precision is lost during arithmetic. The bytecode format has been
+** widened accordingly (see ldump.js / lundump.js) so Lua integers are
+** serialized as 8 bytes instead of 4.
+*/
+const LUA_MAXINTEGER = Number.MAX_SAFE_INTEGER; /*  9007199254740991 */
+const LUA_MININTEGER = -Number.MAX_SAFE_INTEGER; /* -9007199254740991 */
 
 /*
 @@ LUAI_MAXSTACK limits the size of the Lua stack.
@@ -178,24 +192,30 @@ const lua_getlocaledecpoint = function() {
 const LUAL_BUFFERSIZE = conf.LUAL_BUFFERSIZE || 8192;
 
 // See: http://croquetweak.blogspot.fr/2014/08/deconstructing-floats-frexp-and-ldexp.html
+// Decomposes a floating-point value into a normalized fraction (mantissa in [0.5, 1))
+// and an integral power of two. Returns [mantissa, exponent] such that value === mantissa * 2^exponent.
 const frexp = function(value) {
     if (value === 0) return [value, 0];
-    var data = new DataView(new ArrayBuffer(8));
+    const data = new DataView(new ArrayBuffer(8));
     data.setFloat64(0, value);
-    var bits = (data.getUint32(0) >>> 20) & 0x7FF;
-    if (bits === 0) { // denormal
+    let bits = (data.getUint32(0) >>> 20) & 0x7FF;
+    if (bits === 0) { // subnormal (denormal) number: scale up first
         data.setFloat64(0, value * Math.pow(2, 64));  // exp + 64
         bits = ((data.getUint32(0) >>> 20) & 0x7FF) - 64;
     }
-    var exponent = bits - 1022;
-    var mantissa = ldexp(value, -exponent);
+    const exponent = bits - 1022;
+    const mantissa = ldexp(value, -exponent);
     return [mantissa, exponent];
 };
 
+// Multiplies mantissa by 2^exponent, avoiding overflow/underflow by splitting the
+// exponent across multiple steps (each step is at most ~1023, staying within the
+// double-precision exponent range of [-1022, 1023]).
 const ldexp = function(mantissa, exponent) {
-    var steps = Math.min(3, Math.ceil(Math.abs(exponent) / 1023));
-    var result = mantissa;
-    for (var i = 0; i < steps; i++)
+    if (mantissa === 0 || !isFinite(mantissa)) return mantissa;
+    const steps = Math.min(3, Math.ceil(Math.abs(exponent) / 1023));
+    let result = mantissa;
+    for (let i = 0; i < steps; i++)
         result *= Math.pow(2, Math.floor((exponent + i) / steps));
     return result;
 };
