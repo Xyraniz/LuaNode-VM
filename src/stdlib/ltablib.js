@@ -1,6 +1,6 @@
 "use strict";
 
-const { LUA_MAXINTEGER } = require('./luaconf.js');
+const { LUA_MAXINTEGER } = require('../luaconf.js');
 const {
     LUA_OPEQ,
     LUA_OPLT,
@@ -29,7 +29,7 @@ const {
     lua_settop,
     lua_toboolean,
     lua_type
-} = require('./lua.js');
+} = require('../lua.js');
 const {
     luaL_Buffer,
     luaL_addlstring,
@@ -46,9 +46,9 @@ const {
     luaL_optlstring,
     luaL_pushresult,
     luaL_typename
-} = require('./lauxlib.js');
+} = require('../lauxlib.js');
 const lualib = require('./lualib.js');
-const { to_luastring } = require("./fengaricore.js");
+const { to_luastring } = require("../fengaricore.js");
 
 /*
 ** Operations that an object must define to mimic a table
