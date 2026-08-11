@@ -646,7 +646,7 @@ const luaL_requiref = function(L, modname, openf, glb) {
 };
 
 const find_subarray = function(arr, subarr, from_index) {
-    var i = from_index >>> 0,
+    let i = from_index >>> 0,
         sl = subarr.length,
         l = arr.length + 1 - sl;
 
