@@ -79,7 +79,7 @@ const {
 let lua_writestring;
 let lua_writeline;
 if (typeof process === "undefined") {
-    if (typeof TextDecoder === "function") { /* Older browsers don't have TextDecoder */
+    if (typeof TextDecoder === "function") {
         let buff = "";
         let decoder = new TextDecoder("utf-8");
         lua_writestring = function(s) {
