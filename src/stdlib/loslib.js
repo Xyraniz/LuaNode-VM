@@ -20,7 +20,7 @@ const {
     lua_settop,
     lua_toboolean,
     lua_tointegerx
-} = require('./lua.js');
+} = require('../lua.js');
 const {
     luaL_Buffer,
     luaL_addchar,
@@ -40,12 +40,12 @@ const {
     luaL_optlstring,
     luaL_optstring,
     luaL_pushresult
-} = require('./lauxlib.js');
+} = require('../lauxlib.js');
 const {
     luastring_eq,
     to_jsstring,
     to_luastring
-} = require("./fengaricore.js");
+} = require("../fengaricore.js");
 
 /* options for ANSI C 89 (only 1-char options) */
 // const L_STRFTIMEC89 = to_luastring("aAbBcdHIjmMpSUwWxXyYZ%");
