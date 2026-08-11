@@ -14,7 +14,7 @@ const {
     is_luastring,
     luastring_eq,
     to_luastring
-} = require('./defs.js');
+} = require('../defs.js');
 const I64 = require('./lint64.js');
 const ldo      = require('./ldo.js');
 const lfunc    = require('./lfunc.js');

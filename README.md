@@ -173,7 +173,7 @@ npm run lint
 
 ## How 64-bit Integer Support Works
 
-The core of LuaNode-VM's integer overhaul is `src/lint64.js`, a self-contained module providing hybrid Number/BigInt 64-bit integer arithmetic. The design principles are:
+The core of LuaNode-VM's integer overhaul is `src/vm/lint64.js`, a self-contained module providing hybrid Number/BigInt 64-bit integer arithmetic. The design principles are:
 
 1. **Fast path for safe integers**: Values within `Number.MIN_SAFE_INTEGER` to `Number.MAX_SAFE_INTEGER` (±2^53-1) are stored as plain JavaScript `Number`. This covers the vast majority of real-world integer usage and avoids BigInt overhead.
 
@@ -216,18 +216,35 @@ See `.github/workflows/ci.yml` for details.
 ```
 LuaNode-VM/
 ├── src/
-│   ├── lint64.js              # Core 64-bit integer module (hybrid Number/BigInt)
-│   ├── lvm.js                 # Virtual machine (opcodes use I64)
-│   ├── lobject.js             # Object model (intarith, l_str2int via BigInt)
-│   ├── lapi.js                # C API (accepts BigInt integers)
-│   ├── ltable.js              # Tables (BigInt key hashing, 64-bit conversions)
-│   ├── llex.js                # Lexer
-│   ├── lcode.js               # Code generator
-│   ├── ldump.js               # Bytecode serializer (8-byte LE integers)
-│   ├── lundump.js             # Bytecode deserializer (8-byte LE integers)
+│   ├── defs.js                # String conversion helpers (luastring type)
+│   ├── fengari.js             # Main entry point / public API
+│   ├── fengaricore.js         # Fengari core (version info, string helpers)
+│   ├── fengarilib.js          # Fengari library bridge
+│   ├── lua.js                 # Public Lua API surface
 │   ├── luaconf.js             # Configuration (true int64 limits, %.14g format)
-│   ├── llimits.js             # Limits (MAX_INT/MIN_INT = real int64)
-│   ├── fengari.js             # Main entry point
+│   ├── lauxlib.js             # Auxiliary library
+│   ├── linit.js               # Library initialization
+│   ├── vm/                    # Virtual machine core (internal engine)
+│   │   ├── lint64.js          # Core 64-bit integer module (hybrid Number/BigInt)
+│   │   ├── lvm.js             # Virtual machine (opcodes use I64)
+│   │   ├── lobject.js         # Object model (intarith, l_str2int via BigInt)
+│   │   ├── lapi.js            # C API (accepts BigInt integers)
+│   │   ├── ltable.js          # Tables (BigInt key hashing, 64-bit conversions)
+│   │   ├── llex.js            # Lexer
+│   │   ├── lcode.js           # Code generator
+│   │   ├── lparser.js         # Parser
+│   │   ├── lopcodes.js        # Instruction opcodes
+│   │   ├── ldebug.js          # Debug interface
+│   │   ├── ldo.js             # Call stack / coroutine handling
+│   │   ├── lfunc.js           # Function objects
+│   │   ├── lstate.js          # Lua state / global state
+│   │   ├── lstring.js         # String table / interning
+│   │   ├── ltm.js             # Tag methods (metamethods)
+│   │   ├── lzio.js            # Buffered I/O abstraction
+│   │   ├── llimits.js         # Limits (MAX_INT/MIN_INT = real int64)
+│   │   ├── ljstype.js         # Type metadata tables
+│   │   ├── ldump.js           # Bytecode serializer (8-byte LE integers)
+│   │   └── lundump.js         # Bytecode deserializer (8-byte LE integers)
 │   └── stdlib/
 │       ├── lstrlib.js         # String library (formatInteger, pack/unpack 64-bit)
 │       ├── lmathlib.js        # Math library (abs, fmod, ult, random for 64-bit)

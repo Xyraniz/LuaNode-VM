@@ -13,7 +13,7 @@ const {
     thread_status: {
         LUA_OK
     }
-} = require('./defs.js');
+} = require('../defs.js');
 const lobject              = require('./lobject.js');
 const ldo                  = require('./ldo.js');
 const lapi                 = require('./lapi.js');

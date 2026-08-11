@@ -17,10 +17,10 @@ const {
         LUA_TUSERDATA
     },
     to_luastring
-} = require('./defs.js');
+} = require('../defs.js');
 const {
     LUA_MAXINTEGER
-} = require('./luaconf.js');
+} = require('../luaconf.js');
 const { lua_assert } = require('./llimits.js');
 const I64 = require('./lint64.js');
 const ldebug  = require('./ldebug.js');

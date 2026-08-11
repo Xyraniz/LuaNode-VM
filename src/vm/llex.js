@@ -4,7 +4,7 @@ const {
     constant_types: { LUA_TBOOLEAN, LUA_TLNGSTR },
     thread_status: { LUA_ERRSYNTAX },
     to_luastring
-} = require('./defs.js');
+} = require('../defs.js');
 const {
     LUA_MINBUFFER,
     MAX_INT,

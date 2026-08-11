@@ -1,6 +1,6 @@
 "use strict";
 
-const { constant_types: { LUA_TNIL } } = require('./defs.js');
+const { constant_types: { LUA_TNIL } } = require('../defs.js');
 const lobject = require('./lobject.js');
 
 class Proto {

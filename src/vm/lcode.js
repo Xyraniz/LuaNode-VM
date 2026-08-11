@@ -23,7 +23,7 @@ const {
         LUA_TTABLE
     },
     to_luastring
-} = require('./defs.js');
+} = require('../defs.js');
 const { lua_assert } = require("./llimits.js");
 const llex     = require('./llex.js');
 const lobject  = require('./lobject.js');

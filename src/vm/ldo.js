@@ -27,7 +27,7 @@ const {
     lua_Debug,
     luastring_indexOf,
     to_luastring
-} = require('./defs.js');
+} = require('../defs.js');
 const lapi     = require('./lapi.js');
 const ldebug   = require('./ldebug.js');
 const lfunc    = require('./lfunc.js');
@@ -42,7 +42,7 @@ const lparser  = require('./lparser.js');
 const lstate   = require('./lstate.js');
 const { luaS_newliteral } = require('./lstring.js');
 const ltm      = require('./ltm.js');
-const { LUAI_MAXSTACK } = require('./luaconf.js');
+const { LUAI_MAXSTACK } = require('../luaconf.js');
 const lundump  = require('./lundump.js');
 const lvm      = require('./lvm.js');
 const { MBuffer } = require('./lzio.js');

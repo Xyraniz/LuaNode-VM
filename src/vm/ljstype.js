@@ -1,6 +1,6 @@
 "use strict";
 
-const { luastring_of } = require('./defs.js');
+const { luastring_of } = require('../defs.js');
 
 const luai_ctype_ = luastring_of(
     0x00,  /* EOZ */

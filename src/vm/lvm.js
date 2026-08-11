@@ -18,7 +18,7 @@ const {
         LUA_TUSERDATA
     },
     to_luastring
-} = require('./defs.js');
+} = require('../defs.js');
 const {
     INDEXK,
     ISK,
@@ -77,7 +77,7 @@ const {
     LUA_MAXINTEGER,
     LUA_MININTEGER,
     lua_numbertointeger
-} = require('./luaconf.js');
+} = require('../luaconf.js');
 const {
     lua_assert,
     luai_nummod

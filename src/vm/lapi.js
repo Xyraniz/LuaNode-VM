@@ -31,7 +31,7 @@ const {
     thread_status: { LUA_OK },
     from_userstring,
     to_luastring,
-} = require('./defs.js');
+} = require('../defs.js');
 const { api_check } = require('./llimits.js');
 const ldebug    = require('./ldebug.js');
 const ldo       = require('./ldo.js');
@@ -45,7 +45,7 @@ const {
     luaS_newliteral
 } = require('./lstring.js');
 const ltm       = require('./ltm.js');
-const { LUAI_MAXSTACK } = require('./luaconf.js');
+const { LUAI_MAXSTACK } = require('../luaconf.js');
 const lvm       = require('./lvm.js');
 const ltable    = require('./ltable.js');
 const { ZIO } = require('./lzio.js');

@@ -35,12 +35,12 @@ const {
     luastring_eq,
     luastring_indexOf,
     to_luastring
-} = require('./defs.js');
+} = require('../defs.js');
 const {
     api_check,
     lua_assert
 } = require('./llimits.js');
-const { LUA_IDSIZE } = require('./luaconf.js');
+const { LUA_IDSIZE } = require('../luaconf.js');
 const lapi     = require('./lapi.js');
 const ldo      = require('./ldo.js');
 const lfunc    = require('./lfunc.js');

@@ -6,7 +6,7 @@ const {
         LUA_TUSERDATA
     },
     to_luastring
-} = require('./defs.js');
+} = require('../defs.js');
 const { lua_assert } = require('./llimits.js');
 const lobject = require('./lobject.js');
 const ldo     = require('./ldo.js');
