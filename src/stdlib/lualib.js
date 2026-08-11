@@ -3,7 +3,7 @@
 const {
     LUA_VERSION_MAJOR,
     LUA_VERSION_MINOR
-} = require("./lua.js");
+} = require("../lua.js");
 
 const LUA_VERSUFFIX = "_" + LUA_VERSION_MAJOR + "_" + LUA_VERSION_MINOR;
 module.exports.LUA_VERSUFFIX = LUA_VERSUFFIX;
@@ -56,7 +56,7 @@ module.exports.luaopen_package = require("./loadlib.js").luaopen_package;
 
 const LUA_FENGARILIBNAME = "fengari";
 module.exports.LUA_FENGARILIBNAME = LUA_FENGARILIBNAME;
-module.exports.luaopen_fengari = require("./fengarilib.js").luaopen_fengari;
+module.exports.luaopen_fengari = require("../fengarilib.js").luaopen_fengari;
 
-const linit = require('./linit.js');
+const linit = require('../linit.js');
 module.exports.luaL_openlibs = linit.luaL_openlibs;
