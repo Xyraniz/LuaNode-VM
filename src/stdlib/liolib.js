@@ -17,7 +17,7 @@ const {
     lua_setfield,
     lua_tostring,
     lua_touserdata
-} = require('./lua.js');
+} = require('../lua.js');
 const {
     LUA_FILEHANDLE,
     luaL_checkany,
@@ -30,9 +30,9 @@ const {
     luaL_setfuncs,
     luaL_setmetatable,
     luaL_testudata
-} = require('./lauxlib.js');
+} = require('../lauxlib.js');
 const lualib = require('./lualib.js');
-const { to_luastring } = require("./fengaricore.js");
+const { to_luastring } = require("../fengaricore.js");
 
 const IO_PREFIX = "_IO_";
 const IOPREF_LEN = IO_PREFIX.length;
