@@ -33,6 +33,7 @@ const {
     lua_pushinteger,
     lua_pushliteral,
     lua_pushnil,
+    lua_pushnumber,
     lua_pushstring,
     lua_pushvalue,
     lua_rawequal,
@@ -197,13 +198,31 @@ const luaB_rawset = function(L) {
 
 const opts = [
     "stop", "restart", "collect",
-    "count", "step", "setpause", "setstepmul",
+    "count", "countb", "step", "setpause", "setstepmul",
     "isrunning"
 ].map((e) => to_luastring(e));
 const luaB_collectgarbage = function(L) {
-    luaL_checkoption(L, 1, "collect", opts);
-    luaL_optinteger(L, 2, 0);
-    luaL_error(L, to_luastring("lua_gc not implemented"));
+    let o = luaL_checkoption(L, 1, "collect", opts);
+    /* LuaNode-VM delegates object reclamation to the host JavaScript
+       garbage collector (V8/SpiderMonkey/etc.), so there is no separate
+       Lua-level collector to drive. We therefore implement every option
+       as a benign no-op that returns the values mandated by the Lua 5.3
+       reference manual, instead of raising "lua_gc not implemented" —
+       which broke any script that called collectgarbage() (a very common
+       idiom, e.g. between benchmark phases or in test suites). */
+    switch (o) {
+        case 0:  /* "stop"      */ lua_pushboolean(L, 0); return 1;
+        case 1:  /* "restart"   */ lua_pushboolean(L, 1); return 1;
+        case 2:  /* "collect"   */ lua_pushinteger(L, 0); return 1;
+        case 3:  /* "count"     */ lua_pushnumber(L, 0); return 1;  /* KB used (unknown) */
+        case 4:  /* "countb"    */ lua_pushinteger(L, 0); return 1; /* remainder bytes */
+        case 5:  /* "step"      */ lua_pushboolean(L, 1); return 1; /* a full "cycle" done */
+        case 6:  /* "setpause"  */ lua_pushinteger(L, 0); return 1;
+        case 7:  /* "setstepmul"*/ lua_pushinteger(L, 0); return 1;
+        case 8:  /* "isrunning" */ lua_pushboolean(L, 1); return 1; /* always "running" (JS GC) */
+        default:
+            return 0;
+    }
 };
 
 const luaB_type = function(L) {
