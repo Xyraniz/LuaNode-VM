@@ -347,3 +347,49 @@ describe("Integer/float interactions", () => {
         expect(r.value).toBe("true\t-9223372036854775808");
     });
 });
+
+
+describe("Garbage collector", () => {
+    test("marks deeply nested tables without overflowing the JS stack", () => {
+        const r = runLua(
+            "local root = {}; local current = root; " +
+            "for i = 1, 8000 do current.next = {}; current = current.next end; " +
+            "collectgarbage('collect'); " +
+            "return tostring(root.next ~= nil), tostring(current ~= nil)"
+        );
+        expect(r.ok).toBe(true);
+        expect(r.value).toBe("true\ttrue");
+    });
+
+    test("marks cyclic table references", () => {
+        const r = runLua(
+            "local t = {}; t.self = t; collectgarbage('collect'); " +
+            "return tostring(t.self == t)"
+        );
+        expect(r.ok).toBe(true);
+        expect(r.value).toBe("true");
+    });
+});
+
+
+describe("table.sort", () => {
+    test("sorts numeric arrays with the simple Lua comparator", () => {
+        const r = runLua(
+            "local t = {5, 1, 4, 2, 3}; " +
+            "table.sort(t, function(a, b) return a < b end); " +
+            "return table.concat(t, ',')"
+        );
+        expect(r.ok).toBe(true);
+        expect(r.value).toBe("1,2,3,4,5");
+    });
+
+    test("keeps executing non-trivial comparators in Lua", () => {
+        const r = runLua(
+            "local calls = 0; local t = {1, 3, 2}; " +
+            "table.sort(t, function(a, b) calls = calls + 1; return a > b end); " +
+            "return table.concat(t, ','), tostring(calls > 0)"
+        );
+        expect(r.ok).toBe(true);
+        expect(r.value).toBe("3,2,1\ttrue");
+    });
+});
