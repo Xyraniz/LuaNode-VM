@@ -477,7 +477,7 @@ const adjust_assign = function(ls, nvars, nexps, e) {
 const enterlevel = function(ls) {
     let L = ls.L;
     ++L.nCcalls;
-    checklimit(ls.fs, L.nCcalls, LUAI_MAXCCALLS, to_luastring("JS levels", true));
+    checklimit(ls.fs, L.nCcalls, LUAI_MAXCCALLS, to_luastring("C levels", true));
 };
 
 const leavelevel = function(ls) {
@@ -1215,7 +1215,7 @@ const assignment = function(ls, lh, nvars) {
         suffixedexp(ls, nv.v);
         if (nv.v.k !== expkind.VINDEXED)
             check_conflict(ls, lh, nv.v);
-        checklimit(ls.fs, nvars + ls.L.nCcalls, LUAI_MAXCCALLS, to_luastring("JS levels", true));
+        checklimit(ls.fs, nvars + ls.L.nCcalls, LUAI_MAXCCALLS, to_luastring("C levels", true));
         assignment(ls, nv, nvars + 1);
     } else {  /* assignment -> '=' explist */
         checknext(ls, 61 /* ('=').charCodeAt(0) */);

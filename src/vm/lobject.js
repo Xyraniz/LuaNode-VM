@@ -560,11 +560,13 @@ const l_str2int = function(s) {
     else if (s[i] === 43 /* ('+').charCodeAt(0) */) i++;
 
     let a = 0n;  /* BigInt accumulator */
+    let isHex = false;
 
     if (s[i] === 48 /* ('0').charCodeAt(0) */ && (s[i+1] === 120 /* ('x').charCodeAt(0) */ || s[i+1] === 88 /* ('X').charCodeAt(0) */)) {  /* hex? */
+        isHex = true;
         i += 2;  /* skip '0x' */
         for (; i < s.length && lisxdigit(s[i]); i++) {
-            a = a * 16n + BigInt(luaO_hexavalue(s[i]));
+            a = BigInt.asUintN(64, a * 16n + BigInt(luaO_hexavalue(s[i])));
             empty = false;
         }
     } else {  /* decimal */
@@ -576,11 +578,14 @@ const l_str2int = function(s) {
 
     if (neg) a = -a;
 
-    /* Reject anything outside the real int64 range. LUA_MAXINTEGER and
-       LUA_MININTEGER are BigInts (the true 2^63-1 / -2^63), so this compare
-       is exact. */
-    if (a > I64.MAX_INT64 || a < I64.MIN_INT64)
-        return null;  /* out of int64 range: do not accept as integer */
+        if (isHex) {
+        /* PUC-Rio accumulates hexadecimal literals in lua_Unsigned, so
+           excess digits wrap modulo 64 bits before signed reinterpretation. */
+        a = BigInt.asIntN(64, a);
+    } else if (a > I64.MAX_INT64 || a < I64.MIN_INT64) {
+        /* Decimal overflow is rejected rather than wrapped. */
+        return null;
+    }
 
     while (i < s.length && lisspace(s[i])) i++;  /* skip trailing spaces */
     if (empty || (i !== s.length && s[i] !== 0)) return null;  /* something wrong in the numeral */

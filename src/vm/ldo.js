@@ -349,7 +349,7 @@ const tryfuncTM = function(L, off, func) {
 */
 const stackerror = function(L) {
     if (L.nCcalls === LUAI_MAXCCALLS)
-        ldebug.luaG_runerror(L, to_luastring("JS stack overflow", true));
+        ldebug.luaG_runerror(L, to_luastring("C stack overflow", true));
     else if (L.nCcalls >= LUAI_MAXCCALLS + (LUAI_MAXCCALLS >> 3))
         luaD_throw(L, LUA_ERRERR);  /* error while handing stack error */
 };
@@ -589,7 +589,7 @@ const lua_resume = function(L, from, nargs) {
 
     L.nCcalls = from ? from.nCcalls + 1 : 1;
     if (L.nCcalls >= LUAI_MAXCCALLS)
-        return resume_error(L, "JS stack overflow", nargs);
+        return resume_error(L, "C stack overflow", nargs);
 
     L.nny = 0;  /* allow yields */
 
