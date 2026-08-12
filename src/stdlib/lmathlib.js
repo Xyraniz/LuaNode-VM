@@ -126,31 +126,30 @@ const math_random = function(L) {
 
     /* random integer in the interval [low, up] */
     luaL_argcheck(L, I64.le(low, up), 1, "interval is empty");
-    /*
-    ** "interval too large": the width (up - low) must fit within the
-    ** int64 range. Equivalent to: low >= 0 OR up <= MAX_INT + low.
-    */
-    {
-        let widthOk = I64.le(0, low) || I64.le(up, I64.add(LUA_MAXINTEGER, low));
-        luaL_argcheck(L, widthOk, 1, "interval too large");
-    }
 
     /*
-    ** The interval width (up - low + 1) must fit in a JS Number for the
-    ** random draw. For 64-bit integer bounds this is fine in practice
-    ** (a random range larger than 2^53 is meaningless). Convert the
-    ** bounds to Number here so the arithmetic stays in JS Number land.
+    ** Match PUC-Rio's width rule exactly, but perform it in BigInt space.
+    ** Using I64.add here would wrap MAXINTEGER + a positive lower bound and
+    ** incorrectly reject valid intervals such as [1, MAXINTEGER].
     */
-    let lowN = I64.toFloat(low);
-    let upN = I64.toFloat(up);
-    r *= (upN - lowN) + 1;
-    let result = Math.floor(r) + lowN;
+    const lowBig = I64.toBigInt(low);
+    const upBig = I64.toBigInt(up);
+    const widthOk = lowBig >= 0n || upBig <= I64.MAX_INT64 + lowBig;
+    luaL_argcheck(L, widthOk, 1, "interval too large");
+
     /*
-    ** If the bounds were outside the safe range, push back as a hybrid
-    ** int via lua_pushinteger (which accepts BigInt). Otherwise the
-    ** Number result is already an exact integer.
+    ** Draw an unbiased unsigned 64-bit value and use rejection sampling so
+    ** every accepted interval, including ranges near MININTEGER/MAXINTEGER,
+    ** stays exact instead of passing through an imprecise JS Number.
     */
-    lua_pushinteger(L, I64.normalize(result));
+    const span = upBig - lowBig + 1n;
+    const modulus = 1n << 64n;
+    const limit = modulus - (modulus % span);
+    let sample;
+    do {
+        sample = (BigInt(l_rand()) << 32n) | BigInt(l_rand());
+    } while (sample >= limit);
+    lua_pushinteger(L, I64.normalize(lowBig + (sample % span)));
     return 1;
 };
 
@@ -166,7 +165,7 @@ const math_abs = function(L) {
         ** Integer absolute value with 64-bit wraparound. The notable case
         ** is math.abs(math.mininteger): -(-2^63) would be 2^63, which is
         ** outside the int64 range, so it wraps around to math.mininteger
-        ** again — exactly like PUC-Rio Lua. The old `(-n)|0` truncated to
+        ** again â exactly like PUC-Rio Lua. The old `(-n)|0` truncated to
         ** 32 bits and gave wrong results for any |n| >= 2^31.
         */
         let n = lua_tointeger(L, 1);
