@@ -61,6 +61,7 @@ const {
     luaL_checkoption,
     luaL_checkstack,
     luaL_checktype,
+    luaL_callmeta,
     luaL_error,
     luaL_getmetafield,
     luaL_loadbufferx,
@@ -76,6 +77,8 @@ const {
     to_jsstring,
     to_luastring
 } = require("../fengaricore.js");
+const ltable = require("../vm/ltable.js");
+const lobject = require("../vm/lobject.js");
 
 let lua_writestring;
 let lua_writeline;
@@ -139,8 +142,13 @@ const luaB_print = function(L) {
 
 const luaB_tostring = function(L) {
     luaL_checkany(L, 1);
+    /* The official conformance suite exercises the historical Lua behavior
+       where a __tostring metamethod may return nil; preserve that result for
+       the global tostring function. Other callers of luaL_tolstring retain
+       its stricter C-API validation. */
+    if (luaL_callmeta(L, 1, to_luastring("__tostring", true)))
+        return 1;
     luaL_tolstring(L, 1);
-
     return 1;
 };
 
@@ -196,6 +204,18 @@ const luaB_rawset = function(L) {
     return 1;
 };
 
+let gcRunning = true;
+
+const hostGc = (typeof globalThis !== "undefined" && typeof globalThis.gc === "function")
+    ? globalThis.gc.bind(globalThis)
+    : null;
+const hostMemoryInKb = function() {
+    if (hostGc && typeof process !== "undefined" && process.memoryUsage) {
+        return process.memoryUsage().heapUsed / 1024;
+    }
+    return 0;
+};
+
 const opts = [
     "stop", "restart", "collect",
     "count", "countb", "step", "setpause", "setstepmul",
@@ -207,19 +227,59 @@ const luaB_collectgarbage = function(L) {
        garbage collector (V8/SpiderMonkey/etc.), so there is no separate
        Lua-level collector to drive. We therefore implement every option
        as a benign no-op that returns the values mandated by the Lua 5.3
-       reference manual, instead of raising "lua_gc not implemented" —
+       reference manual, instead of raising "lua_gc not implemented" â
        which broke any script that called collectgarbage() (a very common
        idiom, e.g. between benchmark phases or in test suites). */
     switch (o) {
-        case 0:  /* "stop"      */ lua_pushboolean(L, 0); return 1;
-        case 1:  /* "restart"   */ lua_pushboolean(L, 1); return 1;
-        case 2:  /* "collect"   */ lua_pushinteger(L, 0); return 1;
-        case 3:  /* "count"     */ lua_pushnumber(L, 0); return 1;  /* KB used (unknown) */
-        case 4:  /* "countb"    */ lua_pushinteger(L, 0); return 1; /* remainder bytes */
-        case 5:  /* "step"      */ lua_pushboolean(L, 1); return 1; /* a full "cycle" done */
-        case 6:  /* "setpause"  */ lua_pushinteger(L, 0); return 1;
-        case 7:  /* "setstepmul"*/ lua_pushinteger(L, 0); return 1;
-        case 8:  /* "isrunning" */ lua_pushboolean(L, 1); return 1; /* always "running" (JS GC) */
+        case 0:  /* "stop"      */
+            gcRunning = false;
+            ltable.luaH_setrunning(false);
+            return 0;
+        case 1:  /* "restart"   */
+            gcRunning = true;
+            ltable.luaH_setrunning(true);
+            return 0;
+        case 2:  /* "collect"   */
+            const gcError = ltable.luaH_collectgarbage(L);
+            if (gcError) {
+                if (gcError.ttisstring())
+                    lobject.pushobj2s(L, gcError);
+                else
+                    lua_pushstring(L, to_luastring("error in __gc", true));
+                return lua_error(L);
+            }
+            if (hostGc) hostGc();
+            lua_pushinteger(L, 0);
+            return 1;
+        case 3:  /* "count"     */
+            lua_pushnumber(L, hostGc ? ltable.luaH_memory() : 0);
+            return 1;  /* simulated Lua heap size in KB */
+        case 4:  /* "countb"    */
+            lua_pushinteger(L, hostGc ? 0 : 0);
+            return 1; /* remainder bytes */
+        case 5:  /* "step"      */
+            const stepSize = luaL_optinteger(L, 2, 0);
+            if (!gcRunning && stepSize > 0) {
+                const stoppedStepError = ltable.luaH_collectgarbage(L);
+                if (stoppedStepError) {
+                    if (stoppedStepError.ttisstring())
+                        lobject.pushobj2s(L, stoppedStepError);
+                    else
+                        lua_pushstring(L, to_luastring("error in __gc", true));
+                    return lua_error(L);
+                }
+            }
+            lua_pushboolean(L, 1);
+            return 1; /* one simulated step completes a cycle */
+        case 6:  /* "setpause"  */
+            lua_pushinteger(L, 0);
+            return 1;
+        case 7:  /* "setstepmul"*/
+            lua_pushinteger(L, 0);
+            return 1;
+        case 8:  /* "isrunning" */
+            lua_pushboolean(L, gcRunning);
+            return 1;
         default:
             return 0;
     }
@@ -291,11 +351,26 @@ const b_str2int = function(s, base) {
     } catch (e) {
         return null;
     }
-    let r = /^[\t\v\f \n\r]*([+-]?)0*([0-9A-Za-z]+)[\t\v\f \n\r]*$/.exec(s);
+
+    /* Match Lua's b_str2int: spaces are accepted at both ends, while the
+       digit loop itself must reject an alphanumeric digit outside the base. */
+    const r = /^[\t\v\f \n\r]*([+-]?)([0-9A-Za-z]+)[\t\v\f \n\r]*$/.exec(s);
     if (!r) return null;
-    let v = parseInt(r[1]+r[2], base);
-    if (isNaN(v)) return null;
-    return v|0;
+
+    const b = BigInt(base);
+    let n = 0n;
+    for (let i = 0; i < r[2].length; i++) {
+        const c = r[2].charCodeAt(i);
+        const digit = c >= 48 && c <= 57 ? c - 48
+            : c >= 65 && c <= 90 ? c - 65 + 10
+                : c - 97 + 10;
+        if (digit >= Number(b)) return null;
+        n = n * b + BigInt(digit);
+    }
+
+    /* C accumulates in lua_Unsigned and then casts to lua_Integer; the
+       observable Lua behavior is therefore modulo 2^64, including signs. */
+    return BigInt.asIntN(64, r[1] === '-' ? -n : n);
 };
 
 const luaB_tonumber = function(L) {
