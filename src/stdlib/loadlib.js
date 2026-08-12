@@ -91,6 +91,7 @@ const global_env = (function() {
 const JSLIBS = to_luastring("__JSLIBS__");
 const LUA_PATH_VAR = "LUA_PATH";
 const LUA_JSPATH_VAR = "LUA_JSPATH";
+const LUA_CPATH_VAR = "LUA_CPATH";
 
 const LUA_IGMARK = "-";
 
@@ -562,6 +563,7 @@ const luaopen_package = function(L) {
     /* set paths */
     setpath(L, to_luastring("path", true), LUA_PATH_VAR, LUA_PATH_DEFAULT);
     setpath(L, to_luastring("jspath", true), LUA_JSPATH_VAR, LUA_JSPATH_DEFAULT);
+    setpath(L, to_luastring("cpath", true), LUA_CPATH_VAR, LUA_JSPATH_DEFAULT);
     /* store config information */
     lua_pushliteral(L, LUA_DIRSEP + "\n" + LUA_PATH_SEP + "\n" + LUA_PATH_MARK + "\n" +
                         LUA_EXEC_DIR + "\n" + LUA_IGMARK + "\n");
