@@ -338,12 +338,12 @@ describe("Integer/float interactions", () => {
         expect(evalStr("tostring(256 >> 4)").value).toBe("16");
     });
 
-    test("floor division overflow MIN_INT / -1", () => {
+    test("floor division MIN_INT / -1 follows Lua 5.3 semantics", () => {
         const r = runLua(
-            "local ok, err = pcall(function() return math.mininteger // -1 end);" +
-            "return tostring(ok)"
+            "local ok, value = pcall(function() return math.mininteger // -1 end);" +
+            "return tostring(ok), tostring(value)"
         );
         expect(r.ok).toBe(true);
-        expect(r.value).toBe("false");
+        expect(r.value).toBe("true\t-9223372036854775808");
     });
 });
