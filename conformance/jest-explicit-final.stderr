@@ -1,0 +1,11 @@
+PASS tests/regression.test.js
+PASS tests/int64.test.js
+PASS tests/string-format.test.js
+PASS tests/lexer-buffer.test.js
+PASS tests/table-keys.test.js
+
+Test Suites: 5 passed, 5 total
+Tests:       145 passed, 145 total
+Snapshots:   0 total
+Time:        0.729 s, estimated 1 s
+Ran all test suites within paths "tests/int64.test.js", "tests/lexer-buffer.test.js", "tests/regression.test.js", "tests/string-format.test.js", "tests/table-keys.test.js".
