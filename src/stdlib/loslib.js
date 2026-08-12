@@ -85,8 +85,13 @@ const setallfields = function(L, time, utc) {
     setfield(L, "month", (utc ? time.getUTCMonth()   : time.getMonth()) + 1);
     setfield(L, "year",  utc ? time.getUTCFullYear() : time.getFullYear());
     setfield(L, "wday",  (utc ? time.getUTCDay()     : time.getDay()) + 1);
-    setfield(L, "yday", Math.floor((time - (new Date(time.getFullYear(), 0, 0 /* shortcut to correct day by one */))) / 86400000));
-    // setboolfield(L, "isdst", time.get);
+    setfield(L, "yday", Math.floor((time - (utc ? new Date(Date.UTC(time.getUTCFullYear(), 0, 0)) : new Date(time.getFullYear(), 0, 0))) / 86400000));
+    const year = utc ? time.getUTCFullYear() : time.getFullYear();
+    const janOffset = new Date(year, 0, 1).getTimezoneOffset();
+    const julOffset = new Date(year, 6, 1).getTimezoneOffset();
+    const standardOffset = Math.max(janOffset, julOffset);
+    lua_pushboolean(L, !utc && time.getTimezoneOffset() < standardOffset);
+    lua_setfield(L, -2, to_luastring("isdst", true));
 };
 
 const L_MAXDATEFIELD = (Number.MAX_SAFE_INTEGER / 2);
@@ -283,7 +288,7 @@ const strftime = function(L, b, s, date) {
 
                 // '000'
                 case 106 /* j */: {
-                    let yday = Math.floor((date - new Date(date.getFullYear(), 0, 1)) / 86400000);
+                    let yday = Math.floor((date - new Date(date.getFullYear(), 0, 0)) / 86400000);
                     if (yday < 100) {
                         if (yday < 10)
                             luaL_addchar(b, 48 /* 0 */);
@@ -328,7 +333,7 @@ const strftime = function(L, b, s, date) {
                     luaL_addstring(b, to_luastring(String(Math.floor(date / 1000))));
                     break;
 
-                // '\t'  (tab character — char code 9, NOT 8 which is backspace)
+                // '\t'  (tab character â char code 9, NOT 8 which is backspace)
                 case 116 /* t */:
                     luaL_addchar(b, 9);
                     break;
@@ -409,7 +414,7 @@ const os_date = function(L) {
     } else {
         let b = new luaL_Buffer();
         luaL_buffinit(L, b);
-        strftime(L, b, s, stm);
+        strftime(L, b, s.subarray(i), stm);
         luaL_pushresult(b);
     }
     return 1;
