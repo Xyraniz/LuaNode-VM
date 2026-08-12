@@ -432,185 +432,225 @@ const luaH_maybe_gc = function(L) {
 const luaH_collectgarbage = function(L) {
     if (collecting) return;
     collecting = true;
-    if (typeof console !== "undefined" && process && process.env.LUANODE_GC_DEBUG)
-        console.error("GC_START", allTables.size);
     const marked = new Set();
     const visitedTables = new Set();
     let firstFinalizerError = null;
 
-    const markValue = function(type, value) {
-        if (value === null || value === void 0) return;
-        switch (type) {
-            case LUA_TTABLE:
-                markTable(value);
-                break;
-            case LUA_TTHREAD:
-                markThread(value);
-                break;
-            case LUA_TLCL:
-                if (marked.has(value)) return;
-                marked.add(value);
-                if (value.upvals) value.upvals.forEach(markTValue);
-                if (value.p) {
-                    if (value.p.k) value.p.k.forEach(markTValue);
-                    if (value.p.cache) markValue(LUA_TLCL, value.p.cache);
+    try {
+        if (typeof console !== "undefined" &&
+            typeof process !== "undefined" && process.env.LUANODE_GC_DEBUG)
+            console.error("GC_START", allTables.size);
+
+        /*
+        ** Marking is deliberately queue-based. The Lua object graph can be
+        ** arbitrarily deep, so walking it through JavaScript call frames
+        ** makes an ordinary linked list of tables crash V8 with
+        ** "Maximum call stack size exceeded". Marking an object when it is
+        ** queued preserves cycle detection while keeping stack usage flat.
+        */
+        const markQueue = [];
+        let markQueueIndex = 0;
+        const markValue = function(type, value) {
+            if (value === null || value === void 0) return;
+            switch (type) {
+                case LUA_TTABLE:
+                case LUA_TTHREAD:
+                case LUA_TLCL:
+                case LUA_TCCL:
+                case LUA_TUSERDATA:
+                    if (marked.has(value)) return;
+                    marked.add(value);
+                    markQueue.push({ type, value });
+                    break;
+                default:
+                    break;
+            }
+        };
+
+        const markTValue = function(tv) {
+            if (tv && tv.type !== LUA_TNIL && !tv.ttisdeadkey())
+                markValue(tv.type, tv.value);
+        };
+
+        const drainMarkQueue = function() {
+            while (markQueueIndex < markQueue.length) {
+                const object = markQueue[markQueueIndex++];
+                switch (object.type) {
+                    case LUA_TTABLE: {
+                        const table = object.value;
+                        visitedTables.add(table);
+                        table.finalizerPending = false;
+                        if (table.metatable)
+                            markValue(LUA_TTABLE, table.metatable);
+                        for (let entry = table.f; entry; entry = entry.n) {
+                            const key = materializeKey(entry);
+                            const value = materializeValue(entry);
+                            if (key && !entry.weakKey)
+                                markTValue(key);
+                            if (value && !entry.weakValue && key &&
+                                (!entry.weakKey || marked.has(key.value)))
+                                markTValue(value);
+                        }
+                        break;
+                    }
+                    case LUA_TTHREAD: {
+                        const thread = object.value;
+                        if (thread.stack) {
+                            const top = Number.isFinite(thread.top)
+                                ? thread.top
+                                : thread.stack.length;
+                            for (let i = 0; i < top; i++)
+                                markTValue(thread.stack[i]);
+                        }
+                        if (thread.ci && thread.ci.func)
+                            markTValue(thread.ci.func);
+                        break;
+                    }
+                    case LUA_TLCL: {
+                        const closure = object.value;
+                        if (closure.upvals)
+                            closure.upvals.forEach(markTValue);
+                        if (closure.p) {
+                            if (closure.p.k) closure.p.k.forEach(markTValue);
+                            if (closure.p.cache)
+                                markValue(LUA_TLCL, closure.p.cache);
+                        }
+                        break;
+                    }
+                    case LUA_TCCL: {
+                        const closure = object.value;
+                        if (closure.upvalue) closure.upvalue.forEach(markTValue);
+                        break;
+                    }
+                    case LUA_TUSERDATA: {
+                        const userdata = object.value;
+                        if (userdata.metatable)
+                            markValue(LUA_TTABLE, userdata.metatable);
+                        if (userdata.uservalue) markTValue(userdata.uservalue);
+                        break;
+                    }
+                    default:
+                        break;
                 }
-                break;
-            case LUA_TCCL:
-                if (marked.has(value)) return;
-                marked.add(value);
-                if (value.upvalue) value.upvalue.forEach(markTValue);
-                break;
-            case LUA_TUSERDATA:
-                if (marked.has(value)) return;
-                marked.add(value);
-                if (value.metatable) markTable(value.metatable);
-                if (value.uservalue) markTValue(value.uservalue);
-                break;
-            default:
-                break;
+            }
+        };
+
+        markValue(LUA_TTHREAD, L);
+        if (L.l_G && L.l_G.l_registry) markTValue(L.l_G.l_registry);
+        if (L.l_G && L.l_G.mt) {
+            L.l_G.mt.forEach((mt) => {
+                if (mt) markValue(LUA_TTABLE, mt);
+            });
         }
-    };
+        drainMarkQueue();
 
-    const markTValue = function(tv) {
-        if (tv && tv.type !== LUA_TNIL && !tv.ttisdeadkey())
-            markValue(tv.type, tv.value);
-    };
-
-    const markThread = function(thread) {
-        if (!thread || marked.has(thread)) return;
-        marked.add(thread);
-        if (thread.stack) {
-            const top = Number.isFinite(thread.top) ? thread.top : thread.stack.length;
-            for (let i = 0; i < top; i++) markTValue(thread.stack[i]);
+        /* Ephemerons may make more objects reachable after their keys are
+           marked, so repeat the strong-edge pass to a fixed point. */
+        let changed = true;
+        while (changed) {
+            const before = marked.size;
+            for (const table of visitedTables) {
+                for (let entry = table.f; entry; entry = entry.n) {
+                    const key = materializeKey(entry);
+                    const value = materializeValue(entry);
+                    if (value && !entry.weakValue && key &&
+                        (!entry.weakKey || marked.has(key.value)))
+                        markTValue(value);
+                }
+            }
+            drainMarkQueue();
+            changed = marked.size !== before;
         }
-        if (thread.ci && thread.ci.func) markTValue(thread.ci.func);
-    };
 
-    const markTable = function(table) {
-        if (!table || visitedTables.has(table)) return;
-        visitedTables.add(table);
-        marked.add(table);
-        table.finalizerPending = false;
-        if (table.metatable) markTable(table.metatable);
-        for (let entry = table.f; entry; entry = entry.n) {
-            const key = materializeKey(entry);
-            const value = materializeValue(entry);
-            if (key && !entry.weakKey) markTValue(key);
-            if (value && !entry.weakValue &&
-                (!entry.weakKey || marked.has(key.value)))
-                markTValue(value);
-        }
-    };
-
-    markValue(LUA_TTHREAD, L);
-    if (L.l_G && L.l_G.l_registry) markTValue(L.l_G.l_registry);
-    if (L.l_G && L.l_G.mt) {
-        L.l_G.mt.forEach((mt) => { if (mt) markTable(mt); });
-    }
-
-    /* Ephemerons may make more objects reachable after their keys are
-       marked, so repeat the strong-edge pass to a fixed point. */
-    let changed = true;
-    while (changed) {
-        const before = marked.size;
-        for (const table of visitedTables) {
-            for (let entry = table.f; entry; entry = entry.n) {
+        /* Weak references are cleared before finalizers run, matching Lua's
+           observable ordering for finalizers that inspect weak tables. */
+        for (const table of allTables) {
+            for (let entry = table.f; entry;) {
+                const next = entry.n;
                 const key = materializeKey(entry);
                 const value = materializeValue(entry);
-                if (value && !entry.weakValue && key &&
-                    (!entry.weakKey || marked.has(key.value)))
-                    markTValue(value);
+                const tableReachable = marked.has(table);
+                const deadKey = entry.weakKey && key &&
+                    (!tableReachable || !marked.has(key.value));
+                const deadValue = entry.weakValue && value &&
+                    (!tableReachable || !marked.has(value.value));
+                /* Weak keys of reachable tables survive until finalizers run;
+                   weak edges in unreachable metatables are cleared immediately. */
+                if (deadValue || (deadKey && !tableReachable))
+                    removeEntry(table, entry);
+                entry = next;
             }
         }
-        changed = marked.size !== before;
-    }
 
-    /* Weak references are cleared before finalizers run, matching Lua's
-       observable ordering for finalizers that inspect weak tables. */
-    for (const table of allTables) {
-        for (let entry = table.f; entry;) {
-            const next = entry.n;
-            const key = materializeKey(entry);
-            const value = materializeValue(entry);
-            const tableReachable = marked.has(table);
-            const deadKey = entry.weakKey && key &&
-                (!tableReachable || !marked.has(key.value));
-            const deadValue = entry.weakValue && value &&
-                (!tableReachable || !marked.has(value.value));
-            /* Weak keys of reachable tables survive until finalizers run;
-               weak edges in unreachable metatables are cleared immediately. */
-            if (deadValue || (deadKey && !tableReachable)) removeEntry(table, entry);
-            entry = next;
-        }
-    }
-
-    const gcName = luaS_bless(L, to_luastring("__gc", true));
-    const lapi = require('./lapi.js');
-    const ldo = require('./ldo.js');
-    const finalizableTables = Array.from(allTables).reverse();
-    for (const table of finalizableTables) {
-        if (marked.has(table) || table.finalized || !table.metatable) continue;
-        const finalizer = luaH_getstr(table.metatable, gcName);
-        if (!finalizer.ttisfunction()) continue;
-        if (table.metatable.weakMode.indexOf("v") !== -1 &&
-            !marked.has(finalizer.value))
-            continue;
-        if (needsDeferredFinalization(table) && !table.finalizerPending) {
-            table.finalizerPending = true;
-            continue;
-        }
-        table.finalized = true;
-        table.finalizerPending = false;
-        const base = L.top;
-        lobject.pushobj2s(L, finalizer);
-        lobject.pushobj2s(L, new lobject.TValue(LUA_TTABLE, table));
-        if (L.ci.callstatus & lstate.CIST_LUA) {
-            try {
-                ldo.luaD_callnoyield(L, base, 0);
-            } catch (error) {
-                /* Errors from an automatic finalizer are isolated from the
-                   mutator; an explicit collectgarbage call uses pcall below. */
-                L.top = base;
-                L.status = 0;
+        const gcName = luaS_bless(L, to_luastring("__gc", true));
+        const lapi = require('./lapi.js');
+        const ldo = require('./ldo.js');
+        const finalizableTables = Array.from(allTables).reverse();
+        for (const table of finalizableTables) {
+            if (marked.has(table) || table.finalized || !table.metatable) continue;
+            const finalizer = luaH_getstr(table.metatable, gcName);
+            if (!finalizer.ttisfunction()) continue;
+            if (table.metatable.weakMode.indexOf("v") !== -1 &&
+                !marked.has(finalizer.value))
+                continue;
+            if (needsDeferredFinalization(table) && !table.finalizerPending) {
+                table.finalizerPending = true;
+                continue;
             }
-        } else {
-            const status = lapi.lua_pcall(L, 1, 0, 0);
-            if (status !== 0) {
-                if (!firstFinalizerError) {
-                    const errorValue = L.stack[L.top - 1];
-                    firstFinalizerError = errorValue
-                        ? new lobject.TValue(errorValue.type, errorValue.value)
-                        : new lobject.TValue(LUA_TNIL, null);
+            table.finalized = true;
+            table.finalizerPending = false;
+            const base = L.top;
+            lobject.pushobj2s(L, finalizer);
+            lobject.pushobj2s(L, new lobject.TValue(LUA_TTABLE, table));
+            if (L.ci.callstatus & lstate.CIST_LUA) {
+                try {
+                    ldo.luaD_callnoyield(L, base, 0);
+                } catch (error) {
+                    /* Errors from an automatic finalizer are isolated from the
+                       mutator; an explicit collectgarbage call uses pcall below. */
+                    L.top = base;
+                    L.status = 0;
                 }
-                L.top = base;
+            } else {
+                const status = lapi.lua_pcall(L, 1, 0, 0);
+                if (status !== 0) {
+                    if (!firstFinalizerError) {
+                        const errorValue = L.stack[L.top - 1];
+                        firstFinalizerError = errorValue
+                            ? new lobject.TValue(errorValue.type, errorValue.value)
+                            : new lobject.TValue(LUA_TNIL, null);
+                    }
+                    L.top = base;
+                }
             }
         }
-    }
 
-    for (const table of allTables) {
-        for (let entry = table.f; entry;) {
-            const next = entry.n;
-            const key = materializeKey(entry);
-            const value = materializeValue(entry);
-            const deadKey = entry.weakKey && key && !marked.has(key.value);
-            const deadValue = entry.weakValue && value && !marked.has(value.value);
-            if (deadKey || deadValue) removeEntry(table, entry);
-            entry = next;
+        for (const table of allTables) {
+            for (let entry = table.f; entry;) {
+                const next = entry.n;
+                const key = materializeKey(entry);
+                const value = materializeValue(entry);
+                const deadKey = entry.weakKey && key && !marked.has(key.value);
+                const deadValue = entry.weakValue && value && !marked.has(value.value);
+                if (deadKey || deadValue) removeEntry(table, entry);
+                entry = next;
+            }
         }
-    }
 
-    for (const table of allTables) {
-        if (!marked.has(table) && !table.finalizerPending)
-            allTables.delete(table);
+        for (const table of allTables) {
+            if (!marked.has(table) && !table.finalizerPending)
+                allTables.delete(table);
+        }
+        simulatedMemoryKb = Math.max(1, visitedTables.size);
+        return firstFinalizerError;
+    } finally {
+        allocationsSinceCollection = 0;
+        instructionsSinceCollection = 0;
+        collecting = false;
+        if (typeof console !== "undefined" &&
+            typeof process !== "undefined" && process.env.LUANODE_GC_DEBUG)
+            console.error("GC_END", allTables.size, visitedTables.size);
     }
-    allocationsSinceCollection = 0;
-    instructionsSinceCollection = 0;
-    simulatedMemoryKb = Math.max(1, visitedTables.size);
-    collecting = false;
-    if (typeof console !== "undefined" && process && process.env.LUANODE_GC_DEBUG)
-        console.error("GC_END", allTables.size, visitedTables.size);
-    return firstFinalizerError;
 };
 
 /*
