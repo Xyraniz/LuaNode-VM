@@ -250,6 +250,13 @@ const strlen = function(s) {
 
 /* translate a relative string position: negative means back from end */
 const posrelat = function(pos, len) {
+    if (typeof pos === "bigint") {
+        const length = BigInt(len);
+        if (pos >= 0n)
+            return pos > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : Number(pos);
+        if (-pos > length) return 0;
+        return len + Number(pos) + 1;
+    }
     if (pos >= 0) return pos;
     else if (0 - pos > len) return 0;
     else return len + pos + 1;
@@ -339,16 +346,27 @@ const num2straux = function(x) {
 };
 
 const lua_number2strx = function(L, fmt, x) {
-    let buff = num2straux(x);
-    if (fmt[SIZELENMOD] === 65 /* 'A'.charCodeAt(0) */) {
-        for (let i = 0; i < buff.length; i++) {
-            let c = buff[i];
-            if (c >= 97) /* toupper */
-                buff[i] = c & 0xdf;
-        }
-    } else if (fmt[SIZELENMOD] !== 97 /* 'a'.charCodeAt(0) */)
+    const spec = fmt[fmt.length - 1];
+    if (spec !== 97 /* 'a' */ && spec !== 65 /* 'A' */)
         luaL_error(L, to_luastring("modifiers for format '%%a'/'%%A' not implemented"));
-    return buff;
+
+    let text = to_jsstring(num2straux(x));
+    const precisionMatch = String.fromCharCode(...fmt).match(/\.([0-9]+)/);
+    if (precisionMatch && Number.isFinite(x)) {
+        const precision = Number(precisionMatch[1]);
+        const p = text.search(/[pP]/);
+        if (p >= 0) {
+            const mantissa = text.slice(0, p);
+            const exponent = text.slice(p);
+            const dot = mantissa.indexOf(".");
+            const integer = dot >= 0 ? mantissa.slice(0, dot) : mantissa;
+            const fraction = dot >= 0 ? mantissa.slice(dot + 1) : "";
+            text = integer + "." + (fraction + "0".repeat(precision)).slice(0, precision) + exponent;
+        }
+    }
+
+    if (spec === 65) text = text.toUpperCase();
+    return to_luastring(text);
 };
 
 /*
@@ -484,6 +502,57 @@ const addlenmod = function(form, lenmod) {
     // form[l + lm] = 0;
 };
 
+const formatLargeFixed = function(form, n) {
+    const spec = String.fromCharCode(...form);
+    const match = spec.match(/^%([-+ #0]*)([0-9]*)(?:\.([0-9]+))?f$/i);
+    if (typeof process !== "undefined" && process.env.LUANODE_FORMAT_DEBUG)
+        console.error("FORMAT_DEBUG", JSON.stringify(spec), n, Boolean(match));
+    if (!match || !Number.isFinite(n) || Math.abs(n) < 1e21) return null;
+
+    const flags = match[1];
+    const width = match[2] ? Number(match[2]) : 0;
+    const precision = match[3] ? Number(match[3]) : 6;
+    const negative = n < 0;
+    const exponential = Math.abs(n).toString().toLowerCase();
+    const parts = exponential.split("e");
+    const mantissa = parts[0];
+    const exponent = parts.length === 2 ? Number(parts[1]) : 0;
+    const dot = mantissa.indexOf(".");
+    const digits = mantissa.replace(".", "");
+    const decimalPosition = (dot < 0 ? digits.length : dot) + exponent;
+    let integerPart;
+    let fractionPart;
+    if (decimalPosition <= 0) {
+        integerPart = "0";
+        fractionPart = "0".repeat(-decimalPosition) + digits;
+    } else if (decimalPosition >= digits.length) {
+        integerPart = digits + "0".repeat(decimalPosition - digits.length);
+        fractionPart = "";
+    } else {
+        integerPart = digits.slice(0, decimalPosition);
+        fractionPart = digits.slice(decimalPosition);
+    }
+    fractionPart = (fractionPart + "0".repeat(precision)).slice(0, precision);
+    let text = (negative ? "-" : "") + integerPart +
+        (precision > 0 ? "." + fractionPart : "");
+    if (n >= 0 && flags.indexOf("+") !== -1) text = "+" + text;
+    else if (n >= 0 && flags.indexOf(" ") !== -1) text = " " + text;
+
+    if (text.length < width) {
+        const padding = width - text.length;
+        if (flags.indexOf("-") !== -1) {
+            text += " ".repeat(padding);
+        } else if (flags.indexOf("0") !== -1) {
+            const sign = text[0] === "+" || text[0] === "-" || text[0] === " " ? text[0] : "";
+            if (sign) text = sign + "0".repeat(padding) + text.slice(1);
+            else text = "0".repeat(padding) + text;
+        } else {
+            text = " ".repeat(padding) + text;
+        }
+    }
+    return text;
+};
+
 const str_format = function(L) {
     let top = lua_gettop(L);
     let arg = 1;
@@ -525,7 +594,10 @@ const str_format = function(L) {
                 case 'g': case 'G': {
                     let n = luaL_checknumber(L, arg);
                     addlenmod(form, to_luastring(LUA_INTEGER_FRMLEN, true));
-                    luaL_addstring(b, to_luastring(fixExponent(sprintf(String.fromCharCode(...form), n))));
+                    const largeFixed = formatLargeFixed(form, n);
+                    luaL_addstring(b, to_luastring(largeFixed === null
+                        ? fixExponent(sprintf(String.fromCharCode(...form), n))
+                        : largeFixed));
                     break;
                 }
                 case 'q': {
@@ -814,6 +886,7 @@ const str_pack = function(L) {
                 let s = luaL_checkstring(L, arg);
                 let len = s.length;
                 luaL_argcheck(L, len <= size, arg, "string longer than given size");
+                luaL_argcheck(L, len >= size, arg, "wrong length");
                 luaL_addlstring(b, s, len);  /* add string */
                 while (len++ < size)  /* pad extra space */
                     luaL_addchar(b, LUAL_PACKPADBYTE);
@@ -983,16 +1056,12 @@ const unpackint = function(L, str, islittle, size, issigned) {
     /* Fast path: values that fit comfortably in 32 bits. */
     if (size <= 4) {
         let res = 0;
-        for (let i = size - 1; i >= 0; i--) {
-            res <<= NB;
-            res |= str[islittle ? i : size - 1 - i];
-        }
-        if (issigned) {  /* needs sign extension? */
-            let mask = 1 << (size * NB - 1);
-            res = ((res ^ mask) - mask);
-        } else {
-            /* unsigned: force into positive 32-bit range */
-            res = res >>> 0;
+        for (let i = size - 1; i >= 0; i--)
+            res = res * 256 + str[islittle ? i : size - 1 - i];
+        if (issigned) {
+            const bits = size * NB;
+            const sign = Math.pow(2, bits - 1);
+            if (res >= sign) res -= Math.pow(2, bits);
         }
         return res;
     }
@@ -1017,8 +1086,8 @@ const unpackint = function(L, str, islittle, size, issigned) {
         /* Truncate to 64 bits. */
         res = BigInt.asIntN(64, res);
     } else if (issigned) {
-        /* Sign-extend to 64 bits. */
-        res = BigInt.asIntN(SZINT * NB, res);
+        /* Sign-extend to the actual packed width. */
+        res = BigInt.asIntN(size * NB, res);
     } else {
         /* unsigned: keep as unsigned 64-bit then wrap to signed range. */
         res = BigInt.asIntN(SZINT * NB, res);
