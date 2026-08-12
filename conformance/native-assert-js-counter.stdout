@@ -1,0 +1,260 @@
+current path:
+****/usr/local/share/lua/5.3/?.lua;/usr/local/share/lua/5.3/?/init.lua;/usr/share/lua/5.3/?.lua;/usr/share/lua/5.3/?/init.lua;./?.lua;./?/init.lua****
+
+    ---- total memory: 25.6K, max memory: 25.6K ----
+
+time: 0.003017271000000002 (+0.003017271000000002)
+
+***** FILE 'main.lua'*****
+
+***** FILE 'gc.lua'*****
+testing garbage collection
+tables
+strings
+functions
+functions with errors
+long strings
+steps
+steps (2)
+clearing tables
+weak tables
++
+self-referenced threads
+OK
+    ---- total memory: 1.1M, max memory: 1.1M ----
+
+time: 0.866634403 (+0.863617132)
+
+***** FILE 'db.lua'*****
+testing debug library and debug information
++
++
++
+testing debug functions on chunk without debug info
+OK
+    ---- total memory: 99.4K, max memory: 1.1M ----
+
+time: 1.772145119 (+0.905510716)
+
+***** FILE 'calls.lua'*****
+testing functions and calls
++
++
++
++
+testing binary chunks
+OK
+testing strings and string library
+testing 'format %a %A'
+OK
+testing scanner
++
++
++
++
++
+OK
+    ---- total memory: 93.2K, max memory: 1.1M ----
+
+time: 3.7609530970000002 (+1.988807978)
+
+***** FILE 'tpack.lua'*****
+testing pack/unpack
+platform:
+	short 2, int 4, long 4, size_t 4, float 4, double 8,
+	lua Integer 8, lua Number 8
+	little endian
+	alignment: 8
+testing invalid formats
+testing pack/unpack of floating-point numbers
+testing pack/unpack of strings
+testing alignment
+OK
+    ---- total memory: 96.3K, max memory: 1.1M ----
+
+time: 3.8054639370000003 (+0.04451084000000005)
+
+***** FILE 'attrib.lua'*****
+testing require
+package config: /|;|?|!|-|
++
+testing assignments, logical operators, and constructors
++
+OK
+    ---- total memory: 48.2K, max memory: 1.1M ----
+
+time: 3.921050281 (+0.11558634399999956)
+
+***** FILE 'locals.lua'*****
+testing local variables and environments
++
+OK
+    ---- total memory: 140.3K, max memory: 1.1M ----
+
+time: 4.019411748 (+0.09836146700000015)
+
+***** FILE 'constructs.lua'*****
+testing syntax
++
+testing short-circuit optimizations (1)
++
+OK
+    ---- total memory: 4.3M, max memory: 4.3M ----
+
+time: 4.488494287 (+0.4690825390000004)
+
+***** FILE 'code.lua'*****
+    ---- total memory: 4.3M, max memory: 4.3M ----
+
+time: 4.492179187 (+0.003684899999999658)
+
+***** FILE 'nextvar.lua'*****
+testing tables, next, and for
++
++
++
++
+testing floats in numeric for
+OK
+    ---- total memory: 44.1K, max memory: 4.3M ----
+
+time: 5.246222993 (+0.7540438060000003)
+
+***** FILE 'pm.lua'*****
+testing pattern matching
++
++
++
++
+OK
+    ---- total memory: 59.4K, max memory: 4.3M ----
+
+time: 5.321562202 (+0.07533920900000002)
+
+***** FILE 'utf8.lua'*****
+testing UTF-8 library
+ok
+    ---- total memory: 49.2K, max memory: 4.3M ----
+
+time: 5.3648006 (+0.043238397999999734)
+
+***** FILE 'api.lua'*****
+    ---- total memory: 50.2K, max memory: 4.3M ----
+
+time: 5.385604498999999 (+0.02080389899999968)
+
+***** FILE 'events.lua'*****
+testing metatables
++
++
+OK
+    ---- total memory: 62.5K, max memory: 4.3M ----
+
+time: 5.705375341 (+0.3197708420000005)
+
+***** FILE 'vararg.lua'*****
+testing vararg
++
++
++
+OK
+    ---- total memory: 101.4K, max memory: 4.3M ----
+
+time: 5.715610239 (+0.010234898000000214)
+
+***** FILE 'closure.lua'*****
+testing closures
++
+OK
+    ---- total memory: 56.4K, max memory: 4.3M ----
+
+time: 5.7693397939999995 (+0.05372955499999943)
+
+***** FILE 'coroutine.lua'*****
+testing coroutines
++
+testing yields inside metamethods
++
+testing yields inside 'for' iterators
+    ---- total memory: 66.6K, max memory: 4.3M ----
+
+time: 5.842683769 (+0.07334397500000023)
+
+***** FILE 'goto.lua'*****
+OK
+    ---- total memory: 51.2K, max memory: 4.3M ----
+
+time: 5.862987677 (+0.020303907999999815)
+
+***** FILE 'errors.lua'*****
+testing errors
++
+testing tokens in error messages
++
+OK
+    ---- total memory: 116.8K, max memory: 4.3M ----
+
+time: 5.96841686 (+0.10542918300000004)
+
+***** FILE 'math.lua'*****
+testing numbers and math lib
+64-bit integers, 53-bit (mantissa) floats
+testing -0 and NaN
+testing 'math.random'
+OK
+    ---- total memory: 40.0K, max memory: 4.3M ----
+
+time: 6.064765511999999 (+0.09634865199999965)
+
+***** FILE 'sort.lua'*****
+testing (parts of) table library
+testing unpack
+testing pack
+testing sort
+Sorting 5000 elements in 0.76 sec.
+Re-sorting 5000 elements in 0.55 sec.
+Invert-sorting other 5000 elements in 0.82 sec., with 63764 comparisons
+Sorting 5000 equal elements in 0.82 sec.
+OK
+    ---- total memory: 52.3K, max memory: 4.3M ----
+
+time: 10.024599564 (+3.9598340520000006)
+
+***** FILE 'bitwise.lua'*****
+testing bitwise operations
++
+testing bitwise library
++
++
+OK
+    ---- total memory: 43.1K, max memory: 4.3M ----
+
+time: 10.071228338000001 (+0.046628774000000206)
+
+***** FILE 'verybig.lua'*****
+testing RK
+    ---- total memory: 41.0K, max memory: 4.3M ----
+
+time: 10.08100658 (+0.009778241999999437)
+
+***** FILE 'files.lua'*****
+testing i/o
++
++
++
++
++
++
+test done on 12/08/2026, at 09:34:50
+Lua 5.3
+64-bit integers, 64-bit floats
+cleaning all!!!!
+    ---- total memory: 35.9K, max memory: 4.3M ----
+
+
+
+total time: 11.03s (wall time: 11s)
+
+final OK !!!
+NATIVE_ASSERT_MEASUREMENT	true	nil	nil
+NATIVE_ASSERT_COUNT=70715\n
