@@ -804,7 +804,7 @@ const skipcomment = function(lf) {
     if (c === 35 /* '#'.charCodeAt(0) */) {  /* first line is a comment (Unix exec. file)? */
         do {  /* skip first line */
             c = getc(lf);
-        } while (c && c !== 10 /* '\n'.charCodeAt(0) */);
+        } while (c !== null && c !== 10 /* '\n'.charCodeAt(0) */);
 
         return {
             skipped: true,
