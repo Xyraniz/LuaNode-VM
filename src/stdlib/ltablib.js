@@ -52,6 +52,9 @@ const {
     luaL_typename
 } = require('../lauxlib.js');
 const lualib = require('./lualib.js');
+const lvm = require('../vm/lvm.js');
+const lobject = require('../vm/lobject.js');
+const { OpCodesI } = require('../vm/lopcodes.js');
 const { to_luastring } = require("../fengaricore.js");
 
 /*
@@ -375,6 +378,67 @@ const auxsort = function(L, lo, up, rnd, raw) {
     }  /* tail call auxsort(L, lo, up, rnd) */
 };
 
+/*
+** Recognise the exact bytecode emitted for
+**     function(a, b) return a < b end
+**. This is intentionally narrow: all other comparators continue through
+** the Lua call path, preserving full metamethod and side-effect semantics.
+*/
+const isSimpleLessComparator = function(L) {
+    const comparatorIndex = L.ci.funcOff + 2;
+    const comparator = L.stack[comparatorIndex];
+    if (!comparator || !comparator.ttisLclosure()) return false;
+    const closure = comparator.value;
+    const proto = closure.p;
+    if (!proto || closure.nupvalues !== 0 || proto.numparams !== 2 ||
+        proto.is_vararg || proto.code.length !== 6) return false;
+    const code = proto.code;
+    return code[0].opcode === OpCodesI.OP_LT && code[0].A === 1 &&
+        code[0].B === 0 && code[0].C === 1 &&
+        code[1].opcode === OpCodesI.OP_JMP && code[1].sBx === 1 &&
+        code[2].opcode === OpCodesI.OP_LOADBOOL && code[2].A === 2 &&
+        code[2].B === 0 && code[2].C === 1 &&
+        code[3].opcode === OpCodesI.OP_LOADBOOL && code[3].A === 2 &&
+        code[3].B === 1 && code[3].C === 0 &&
+        code[4].opcode === OpCodesI.OP_RETURN && code[4].A === 2 &&
+        code[4].B === 2 && code[5].opcode === OpCodesI.OP_RETURN &&
+        code[5].A === 0 && code[5].B === 1;
+};
+
+/*
+** Sort dense numeric arrays without re-entering the Lua VM for every
+** comparison. The values are copied as TValue objects, so the optimisation
+** never exposes mutable stack slots to JavaScript's sort implementation.
+*/
+const sortNumericFast = function(L, n, raw) {
+    const values = new Array(n);
+    const base = L.top;
+    for (let i = 1; i <= n; i++) {
+        getitem(L, raw, i);
+        const value = L.stack[L.top - 1];
+        if (!value || !value.ttisnumber()) {
+            L.top = base;
+            return false;
+        }
+        values[i - 1] = new lobject.TValue(value.type, value.value);
+        lua_pop(L, 1);
+    }
+
+    values.sort((a, b) => {
+        if (lvm.luaV_lessthan(L, a, b)) return -1;
+        if (lvm.luaV_lessthan(L, b, a)) return 1;
+        return 0;
+    });
+
+    for (let i = 1; i <= n; i++) {
+        lobject.pushobj2s(L, values[i - 1]);
+        if (raw) lua_rawseti(L, 1, i);
+        else lua_seti(L, 1, i);
+    }
+    L.top = base;
+    return true;
+};
+
 const sort = function(L) {
     const raw = has_raw_rw(L, 1);
     let n = aux_getn(L, 1, TAB_RW);
@@ -383,6 +447,9 @@ const sort = function(L) {
         if (!lua_isnoneornil(L, 2))  /* is there a 2nd argument? */
             luaL_checktype(L, 2, LUA_TFUNCTION);  /* must be a function */
         lua_settop(L, 2);  /* make sure there are two arguments */
+        if ((lua_isnil(L, 2) || isSimpleLessComparator(L)) &&
+            raw && sortNumericFast(L, n, true))
+            return 0;
         auxsort(L, 1, n, 0, raw);
     }
     return 0;
