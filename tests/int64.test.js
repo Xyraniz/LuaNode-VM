@@ -143,10 +143,10 @@ describe("Integer division and modulo (Lua 5.3 semantics)", () => {
         expect(r.message).toMatch(/n%0|modulo/);
     });
 
-    test("mininteger // -1 raises overflow error", () => {
-        const r = runLuaError("return math.mininteger // -1");
+    test("mininteger // -1 returns mininteger (Lua 5.3 semantics)", () => {
+        const r = evalStr("tostring(math.mininteger // -1)");
         expect(r.ok).toBe(true);
-        expect(r.message).toMatch(/overflow/);
+        expect(r.value).toBe("-9223372036854775808");
     });
 
     test("mininteger % -1 = 0 (no overflow)", () => {
