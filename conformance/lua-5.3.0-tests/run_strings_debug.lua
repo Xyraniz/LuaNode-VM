@@ -1,0 +1,6 @@
+_U = true
+_soft = true
+_port = true
+_nomsg = true
+local ok, err = pcall(dofile, "strings-debug.lua")
+print("STRINGS_RESULT", ok, type(err), tostring(err))
