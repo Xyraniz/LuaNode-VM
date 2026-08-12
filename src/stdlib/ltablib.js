@@ -25,6 +25,9 @@ const {
     lua_pushstring,
     lua_pushvalue,
     lua_rawget,
+    lua_rawgeti,
+    lua_rawlen,
+    lua_rawseti,
     lua_setfield,
     lua_seti,
     lua_settop,
@@ -88,6 +91,25 @@ const aux_getn = function(L, n, w) {
     return luaL_len(L, n);
 };
 
+/* A real table with no read/write metamethods must be manipulated through
+   raw access after the length check. This matters when __len mutates the
+   metatable while table.insert is computing the insertion point. */
+const has_raw_rw = function(L, n) {
+    if (lua_type(L, n) !== LUA_TTABLE) return false;
+    const top = lua_gettop(L);
+    let raw = true;
+    if (lua_getmetatable(L, n)) {
+        lua_pushstring(L, to_luastring("__index", true));
+        if (lua_rawget(L, -2) !== LUA_TNIL) raw = false;
+        lua_pop(L, 1);
+        lua_pushstring(L, to_luastring("__newindex", true));
+        if (lua_rawget(L, -2) !== LUA_TNIL) raw = false;
+        lua_pop(L, 1);
+    }
+    lua_settop(L, top);
+    return raw;
+};
+
 const addfield = function(L, b, i) {
     lua_geti(L, 1, i);
     if (!lua_isstring(L, -1))
@@ -98,7 +120,8 @@ const addfield = function(L, b, i) {
 };
 
 const tinsert = function(L) {
-    let e = aux_getn(L, 1, TAB_RW) + 1;  /* first empty element */
+    const raw = has_raw_rw(L, 1);
+    let e = aux_getn(L, 1, TAB_RW) + 1;
     let pos;
     switch (lua_gettop(L)) {
         case 2:
@@ -108,8 +131,10 @@ const tinsert = function(L) {
             pos = luaL_checkinteger(L, 2);  /* 2nd argument is the position */
             luaL_argcheck(L, 1 <= pos && pos <= e, 2, "position out of bounds");
             for (let i = e; i > pos; i--) {  /* move up elements */
-                lua_geti(L, 1, i - 1);
-                lua_seti(L, 1, i);  /* t[i] = t[i - 1] */
+                if (raw) lua_rawgeti(L, 1, i - 1);
+                else lua_geti(L, 1, i - 1);
+                if (raw) lua_rawseti(L, 1, i);
+                else lua_seti(L, 1, i);  /* t[i] = t[i - 1] */
             }
             break;
         }
@@ -118,7 +143,8 @@ const tinsert = function(L) {
         }
     }
 
-    lua_seti(L, 1, pos);  /* t[pos] = v */
+    if (raw) lua_rawseti(L, 1, pos);
+    else lua_seti(L, 1, pos);  /* t[pos] = v */
     return 0;
 };
 
@@ -150,6 +176,7 @@ const tmove = function(L) {
     let tt = !lua_isnoneornil(L, 5) ? 5 : 1;  /* destination table */
     checktab(L, 1, TAB_R);
     checktab(L, tt, TAB_W);
+    luaL_argcheck(L, I64.lt(0, f), 2, "must be positive");
     if (e >= f) {  /* otherwise, nothing to move */
         luaL_argcheck(L, I64.lt(0, f) || I64.lt(e, I64.add(LUA_MAXINTEGER, f)), 3, "too many elements to move");
         let n = I64.sub(I64.add(e, 1), f);  /* number of elements to move */
@@ -207,15 +234,21 @@ const pack = function(L) {
 };
 
 const unpack = function(L) {
-    let i = luaL_optinteger(L, 2, 1);
-    let e = luaL_opt(L, luaL_checkinteger, 3, luaL_len(L, 1));
+    /* Keep the range arithmetic exact for math.mininteger/maxinteger. */
+    let i = BigInt(luaL_optinteger(L, 2, 1));
+    let e = BigInt(luaL_opt(L, luaL_checkinteger, 3, luaL_len(L, 1)));
     if (i > e) return 0;  /* empty range */
-    let n = e - i;  /* number of elements minus 1 (avoid overflows) */
-    if (n >= Number.MAX_SAFE_INTEGER || !lua_checkstack(L, ++n))
+
+    let count = e - i;  /* number of elements minus 1 (avoid overflows) */
+    if (count >= BigInt(Number.MAX_SAFE_INTEGER))
+        return luaL_error(L, to_luastring("too many results to unpack"));
+
+    const n = Number(count + 1n);
+    if (!lua_checkstack(L, n))
         return luaL_error(L, to_luastring("too many results to unpack"));
     for (; i < e; i++)  /* push arg[i..e - 1] (to avoid overflows) */
-        lua_geti(L, 1, i);
-    lua_geti(L, 1, e);  /* push last element */
+        lua_geti(L, 1, I64.normalize(i));
+    lua_geti(L, 1, I64.normalize(e));  /* push last element */
     return n;
 };
 
@@ -225,9 +258,18 @@ const l_randomizePivot = function() {
 
 const RANLIMIT = 100;
 
-const set2 = function(L, i, j) {
-    lua_seti(L, 1, i);
-    lua_seti(L, 1, j);
+const getitem = function(L, raw, i) {
+    return raw ? lua_rawgeti(L, 1, i) : lua_geti(L, 1, i);
+};
+
+const set2 = function(L, i, j, raw) {
+    if (raw) {
+        lua_rawseti(L, 1, i);
+        lua_rawseti(L, 1, j);
+    } else {
+        lua_seti(L, 1, i);
+        lua_seti(L, 1, j);
+    }
 };
 
 const sort_comp = function(L, a, b) {
@@ -244,20 +286,20 @@ const sort_comp = function(L, a, b) {
     }
 };
 
-const partition = function(L, lo, up) {
+const partition = function(L, lo, up, raw) {
     let i = lo;  /* will be incremented before first use */
     let j = up - 1;  /* will be decremented before first use */
     /* loop invariant: a[lo .. i] <= P <= a[j .. up] */
     for (;;) {
         /* next loop: repeat ++i while a[i] < P */
-        while (lua_geti(L, 1, ++i), sort_comp(L, -1, -2)) {
+        while (getitem(L, raw, ++i), sort_comp(L, -1, -2)) {
             if (i == up - 1)  /* a[i] < P  but a[up - 1] == P  ?? */
                 luaL_error(L, to_luastring("invalid order function for sorting"));
             lua_pop(L, 1);  /* remove a[i] */
         }
         /* after the loop, a[i] >= P and a[lo .. i - 1] < P */
         /* next loop: repeat --j while P < a[j] */
-        while (lua_geti(L, 1, --j), sort_comp(L, -3, -1)) {
+        while (getitem(L, raw, --j), sort_comp(L, -3, -1)) {
             if (j < i)  /* j < i  but  a[j] > P ?? */
                 luaL_error(L, to_luastring("invalid order function for sorting"));
             lua_pop(L, 1);  /* remove a[j] */
@@ -267,11 +309,11 @@ const partition = function(L, lo, up) {
             /* a[lo .. i - 1] <= P <= a[j + 1 .. i .. up] */
             lua_pop(L, 1);  /* pop a[j] */
             /* swap pivot (a[up - 1]) with a[i] to satisfy pos-condition */
-            set2(L, up - 1, i);
+            set2(L, up - 1, i, raw);
             return i;
         }
         /* otherwise, swap a[i] - a[j] to restore invariant and repeat */
-        set2(L, i, j);
+        set2(L, i, j, raw);
     }
 };
 
@@ -282,13 +324,13 @@ const choosePivot = function(lo, up, rnd) {
     return p;
 };
 
-const auxsort = function(L, lo, up, rnd) {
+const auxsort = function(L, lo, up, rnd, raw) {
     while (lo < up) {  /* loop for tail recursion */
         /* sort elements 'lo', 'p', and 'up' */
-        lua_geti(L, 1, lo);
-        lua_geti(L, 1, up);
+        getitem(L, raw, lo);
+        getitem(L, raw, up);
         if (sort_comp(L, -1, -2))  /* a[up] < a[lo]? */
-            set2(L, lo, up);  /* swap a[lo] - a[up] */
+            set2(L, lo, up, raw);  /* swap a[lo] - a[up] */
         else
             lua_pop(L, 2);  /* remove both values */
         if (up - lo == 1)  /* only 2 elements? */
@@ -298,33 +340,33 @@ const auxsort = function(L, lo, up, rnd) {
             p = Math.floor((lo + up)/2);  /* middle element is a good pivot */
         else  /* for larger intervals, it is worth a random pivot */
             p = choosePivot(lo, up, rnd);
-        lua_geti(L, 1, p);
-        lua_geti(L, 1, lo);
+        getitem(L, raw, p);
+        getitem(L, raw, lo);
         if (sort_comp(L, -2, -1))  /* a[p] < a[lo]? */
-            set2(L, p, lo);  /* swap a[p] - a[lo] */
+            set2(L, p, lo, raw);  /* swap a[p] - a[lo] */
         else {
             lua_pop(L, 1);  /* remove a[lo] */
-            lua_geti(L, 1, up);
+            getitem(L, raw, up);
             if (sort_comp(L, -1, -2))  /* a[up] < a[p]? */
-                set2(L, p, up);  /* swap a[up] - a[p] */
+                set2(L, p, up, raw);  /* swap a[up] - a[p] */
             else
                 lua_pop(L, 2);
         }
         if (up - lo == 2)  /* only 3 elements? */
             return;  /* already sorted */
-        lua_geti(L, 1, p);  /* get middle element (Pivot) */
+        getitem(L, raw, p);  /* get middle element (Pivot) */
         lua_pushvalue(L, -1);  /* push Pivot */
-        lua_geti(L, 1, up - 1);  /* push a[up - 1] */
-        set2(L, p, up - 1);  /* swap Pivot (a[p]) with a[up - 1] */
-        p = partition(L, lo, up);
+        getitem(L, raw, up - 1);  /* push a[up - 1] */
+        set2(L, p, up - 1, raw);  /* swap Pivot (a[p]) with a[up - 1] */
+        p = partition(L, lo, up, raw);
         let n;
         /* a[lo .. p - 1] <= a[p] == P <= a[p + 1 .. up] */
         if (p - lo < up - p) {  /* lower interval is smaller? */
-            auxsort(L, lo, p - 1, rnd);  /* call recursively for lower interval */
+            auxsort(L, lo, p - 1, rnd, raw);  /* call recursively for lower interval */
             n = p - lo;  /* size of smaller interval */
             lo = p + 1;  /* tail call for [p + 1 .. up] (upper interval) */
         } else {
-            auxsort(L, p + 1, up, rnd);  /* call recursively for upper interval */
+            auxsort(L, p + 1, up, rnd, raw);  /* call recursively for upper interval */
             n = up - p;  /* size of smaller interval */
             up = p - 1;  /* tail call for [lo .. p - 1]  (lower interval) */
         }
@@ -334,13 +376,14 @@ const auxsort = function(L, lo, up, rnd) {
 };
 
 const sort = function(L) {
+    const raw = has_raw_rw(L, 1);
     let n = aux_getn(L, 1, TAB_RW);
     if (n > 1) {  /* non-trivial interval? */
         luaL_argcheck(L, n < LUA_MAXINTEGER, 1, "array too big");
         if (!lua_isnoneornil(L, 2))  /* is there a 2nd argument? */
             luaL_checktype(L, 2, LUA_TFUNCTION);  /* must be a function */
         lua_settop(L, 2);  /* make sure there are two arguments */
-        auxsort(L, 1, n, 0);
+        auxsort(L, 1, n, 0, raw);
     }
     return 0;
 };
