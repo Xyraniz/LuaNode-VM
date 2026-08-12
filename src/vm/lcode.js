@@ -401,7 +401,7 @@ const luaK_checkstack = function(fs, n) {
     let newstack = fs.freereg + n;
     if (newstack > fs.f.maxstacksize) {
         if (newstack >= MAXREGS)
-            llex.luaX_syntaxerror(fs.ls, to_luastring("function or expression needs too many registers", true));
+            llex.luaX_syntaxerror(fs.ls, to_luastring("expression too complex", true));
         fs.f.maxstacksize = newstack;
     }
 };

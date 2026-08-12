@@ -421,7 +421,10 @@ const lua_setmetatable = function(L, objindex) {
     switch (obj.ttnov()) {
         case LUA_TUSERDATA:
         case LUA_TTABLE: {
-            obj.value.metatable = mt;
+            if (obj.ttistable())
+                ltable.luaH_setmeta(L, obj.value, mt);
+            else
+                obj.value.metatable = mt;
             break;
         }
         default: {

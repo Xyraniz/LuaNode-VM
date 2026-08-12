@@ -187,6 +187,7 @@ const luaV_execute = function(L) {
     ci.callstatus |= lstate.CIST_FRESH;
     newframe:
     for (;;) {
+        ltable.luaH_maybe_gc(L);
         lua_assert(ci === L.ci);
         let cl = ci.func.value;
         let k = cl.p.k;
@@ -761,14 +762,12 @@ const luaV_equalobj = function(L, t1, t2) {
         if (t1.ttnov() !== t2.ttnov() || t1.ttnov() !== LUA_TNUMBER)
             return 0; /* only numbers can be equal with different variants */
         else { /* two numbers with different variants (int vs float) */
-            /*
-            ** An integer and a float are equal iff they have the same
-            ** mathematical value. The integer may be a BigInt (outside the
-            ** safe range); route through lint64.eq which handles the
-            ** Number/BigInt mix correctly (=== would always be false
-            ** across the two JS types).
-            */
-            return I64.eq(t1.value, t2.value) ? 1 : 0;
+            /* PUC-Rio converts the integer to lua_Number for a mixed
+               comparison, so a rounded float such as 2^63 compares equal to
+               math.maxinteger. */
+            return (t1.ttisinteger()
+                ? I64.toFloat(t1.value) === t2.value
+                : t1.value === I64.toFloat(t2.value)) ? 1 : 0;
         }
     }
 
@@ -918,6 +917,10 @@ const LTnum = function(l, r) {
 ** Return 'l <= r', for numbers.
 */
 const LEnum = function(l, r) {
+    if (l.ttisinteger() && r.ttisfloat())
+        return I64.toFloat(l.value) <= r.value;
+    if (l.ttisfloat() && r.ttisinteger())
+        return l.value <= I64.toFloat(r.value);
     if (typeof l.value === "bigint" || typeof r.value === "bigint")
         return I64.le(l.value, r.value);
     return l.value <= r.value;

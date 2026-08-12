@@ -173,14 +173,13 @@ const neg = function(a) {
 ** error raised by the caller (the VM), not here, so this helper returns a
 ** raw BigInt quotient that the caller wraps.
 **
-** The only overflow case is MIN_INT64 // -1, whose mathematical result
-** (2^63) cannot be represented as an int64: Lua 5.3 raises "integer
-** overflow". We signal it by returning the string "overflow".
+** The MIN_INT64 // -1 corner case is handled explicitly: PUC-Rio Lua
+** returns MIN_INT64, avoiding the unrepresentable positive quotient.
 */
 const idiv = function(a, b) {
     let ba = toBigInt(a), bb = toBigInt(b);
     if (bb === 0n) return "divzero";
-    if (ba === MIN_INT64 && bb === -1n) return "overflow";
+    if (ba === MIN_INT64 && bb === -1n) return MIN_INT64;
     /* BigInt division truncates toward zero; Lua wants floor. */
     let q = ba / bb;
     if ((ba < 0n) !== (bb < 0n) && q * bb !== ba) q -= 1n;
@@ -193,7 +192,7 @@ const imod = function(a, b) {
     /* MIN % -1 == 0 in Lua (no overflow). */
     if (ba === MIN_INT64 && bb === -1n) return 0;
     let r = ba % bb;
-    if ((r < 0n) !== (bb < 0n)) r += bb;  /* floor semantics */
+    if (r !== 0n && (r < 0n) !== (bb < 0n)) r += bb;  /* floor semantics */
     return shrink(r);
 };
 

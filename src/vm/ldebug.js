@@ -199,10 +199,10 @@ const lua_setlocal = (L, ar, n) => {
 
 const funcinfo = (ar, cl) => {
     if (cl === null || cl instanceof lobject.CClosure) {
-        ar.source = to_luastring("=[JS]", true);
+        ar.source = to_luastring("=[C]", true);
         ar.linedefined = -1;
         ar.lastlinedefined = -1;
-        ar.what = to_luastring("J", true);
+        ar.what = to_luastring("C", true);
     } else {
         const p = cl.p;
         ar.source = p.source ? p.source.getstr() : to_luastring("=?", true);
@@ -532,7 +532,11 @@ const varinfo = (L, o) => {
 
 const luaG_typeerror = (L, o, op) => {
     const t = ltm.luaT_objtypename(L, o);
-    luaG_runerror(L, to_luastring("attempt to %s a %s value%s", true), op, t, varinfo(L, o));
+    const detail = varinfo(L, o);
+    if (luastring_eq(op, to_luastring("call", true)) && o.ttisnil())
+        luaG_runerror(L, to_luastring("attempt to call a nil value%s (no value)", true), detail);
+    else
+        luaG_runerror(L, to_luastring("attempt to %s a %s value%s", true), op, t, detail);
 };
 
 const luaG_concaterror = (L, p1, p2) => {
