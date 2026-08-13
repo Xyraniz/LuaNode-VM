@@ -26,6 +26,34 @@ LuaNode-VM keeps the C-API-shaped JavaScript architecture while implementing a f
 
 This table is a compatibility summary, not a performance benchmark. It should be verified by running the commands in the [Verification](#verification) section.
 
+## Luau compatibility decision
+
+LuaNode-VM deliberately targets **Lua 5.3**, not Luau. Luau is based on Lua 5.1 and has its own parser, multi-pass compiler, bytecode format, optimized interpreter, sandboxing model, and language extensions such as type annotations, `continue`, compound assignments, `const`, generalized iteration, and `if` expressions [5] [6] [7]. Its compatibility documentation also explicitly chooses not to provide Lua 5.3's first-class 64-bit integer type and bitwise operators [5]. Therefore, accepting a few Luau tokens in this parser would not create real Luau compatibility; it would create an ambiguous dialect with mismatched runtime semantics.
+
+The strong engineering path is to keep this repository as a rigorous Lua 5.3 runtime and, if Luau becomes a product requirement, add a separate optional backend or adapter behind an explicit API boundary. That preserves the exact-int64 and conformance advantages here instead of weakening them in an attempt to emulate two incompatible language contracts.
+
+## Performance work
+
+The runtime now has a specialized dense-numeric `table.sort` path that copies values out of the Lua table, compares integer and float `TValue` values without re-entering the VM, and writes them back through raw table primitives. The general path remains in place for tables with metamethods or custom comparators. The common safe-integer arithmetic path also avoids `BigInt` allocation unless an operation leaves the JavaScript safe-integer range.
+
+The benchmark is intentionally small and reproducible rather than a universal performance claim:
+
+```bash
+npm run benchmark
+```
+
+To compare against Fengari in a temporary directory:
+
+```bash
+mkdir -p /tmp/fengari-compare
+cd /tmp/fengari-compare
+npm init -y
+npm install fengari fengari-node-cli
+npx fengari /path/to/LuaNode-VM/bench/runtime.lua
+```
+
+Run both commands on the same machine, Node.js version, and workload. The benchmark covers arithmetic, numeric table indexing, field access, Lua calls, and dense numeric sorting. It is expected that LuaNode-VM's strongest advantage is the exact-int64 and compatibility surface; performance numbers must be reported as workload-specific measurements rather than as a blanket claim.
+
 ## Integer semantics
 
 The implementation uses a hybrid representation:
@@ -88,7 +116,7 @@ node cli/luanode.js -e 'print(math.maxinteger); print(math.maxinteger + 1)'
 ## JavaScript API
 
 ```javascript
-const F = require("./src/fengari.js");
+const F = require("./src/luanode.js");
 const { lua, lauxlib, lualib, to_luastring } = F;
 
 const L = lauxlib.luaL_newstate();
@@ -116,14 +144,15 @@ npx jest --runInBand --runTestsByPath \
   tests/lexer-buffer.test.js \
   tests/regression.test.js \
   tests/string-format.test.js \
-  tests/table-keys.test.js
+  tests/table-keys.test.js \
+  tests/table-sort-fast.test.js
 ```
 
 The final verification in this repository produced:
 
 ```text
-Test Suites: 5 passed, 5 total
-Tests:       145 passed, 145 total
+Test Suites: 7 passed, 7 total
+Tests:       154 passed, 154 total
 ```
 
 ### 2. Official PUC-Rio Lua 5.3 test suite
@@ -281,3 +310,6 @@ LuaNode-VM is distributed under the MIT License. See [LICENSE](LICENSE). Fengari
 [3]: https://www.lua.org/tests/ "Official Lua test suites"
 
 [4]: https://www.lua.org/manual/5.3/manual.html "Lua 5.3 Reference Manual"
+[5]: https://luau.org/compatibility "Luau compatibility with Lua"
+[6]: https://luau.org/syntax "Luau syntax by example"
+[7]: https://luau.org/performance "How Luau makes Luau fast"

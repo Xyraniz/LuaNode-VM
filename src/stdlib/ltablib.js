@@ -26,7 +26,6 @@ const {
     lua_pushvalue,
     lua_rawget,
     lua_rawgeti,
-    lua_rawlen,
     lua_rawseti,
     lua_setfield,
     lua_seti,
@@ -52,8 +51,8 @@ const {
     luaL_typename
 } = require('../lauxlib.js');
 const lualib = require('./lualib.js');
-const lvm = require('../vm/lvm.js');
 const lobject = require('../vm/lobject.js');
+const ltable = require('../vm/ltable.js');
 const { OpCodesI } = require('../vm/lopcodes.js');
 const { to_luastring } = require("../fengaricore.js");
 
@@ -406,36 +405,54 @@ const isSimpleLessComparator = function(L) {
 };
 
 /*
+** Compare two numeric TValue values without entering the Lua VM. This is
+** equivalent to Lua 5.3's numeric '<' for the default table.sort path:
+** integer/integer comparisons stay exact, while mixed integer/float values
+** use the same integer-to-float conversion as the regular VM path.
+*/
+const numericLess = function(a, b) {
+    if (a.ttisinteger() && b.ttisinteger())
+        return I64.lt(a.value, b.value);
+    if (a.ttisfloat() && b.ttisfloat())
+        return a.value < b.value;
+    return a.ttisinteger()
+        ? I64.toFloat(a.value) < b.value
+        : a.value < I64.toFloat(b.value);
+};
+
+/*
 ** Sort dense numeric arrays without re-entering the Lua VM for every
 ** comparison. The values are copied as TValue objects, so the optimisation
 ** never exposes mutable stack slots to JavaScript's sort implementation.
+** Raw table primitives are used directly because `table.sort` has already
+** proved that the table has no read/write metamethods.
 */
 const sortNumericFast = function(L, n, raw) {
+    if (!raw || typeof n !== "number" || !Number.isSafeInteger(n))
+        return false;
+
+    const tableSlot = L.stack[L.ci.funcOff + 1];
+    if (!tableSlot || !tableSlot.ttistable())
+        return false;
+
+    const table = tableSlot.value;
     const values = new Array(n);
-    const base = L.top;
     for (let i = 1; i <= n; i++) {
-        getitem(L, raw, i);
-        const value = L.stack[L.top - 1];
-        if (!value || !value.ttisnumber()) {
-            L.top = base;
+        const value = ltable.luaH_getint(table, i);
+        if (!value || !value.ttisnumber())
             return false;
-        }
         values[i - 1] = new lobject.TValue(value.type, value.value);
-        lua_pop(L, 1);
     }
 
     values.sort((a, b) => {
-        if (lvm.luaV_lessthan(L, a, b)) return -1;
-        if (lvm.luaV_lessthan(L, b, a)) return 1;
+        if (numericLess(a, b)) return -1;
+        if (numericLess(b, a)) return 1;
         return 0;
     });
 
-    for (let i = 1; i <= n; i++) {
-        lobject.pushobj2s(L, values[i - 1]);
-        if (raw) lua_rawseti(L, 1, i);
-        else lua_seti(L, 1, i);
-    }
-    L.top = base;
+    for (let i = 1; i <= n; i++)
+        ltable.luaH_setint(table, i, values[i - 1]);
+
     return true;
 };
 

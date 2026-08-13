@@ -127,41 +127,41 @@ const wrap = function(b) {
 /* ---- arithmetic with wraparound ------------------------------------- */
 
 const add = function(a, b) {
-    if (isSafeNumber(a) && isSafeNumber(b)) {
-        /* Fast path: only promote when the result can exceed the safe range. */
-        let r = a + b;
-        if (r >= MIN_SAFE && r <= MAX_SAFE) return r;
+    /* Every Number reaching integer arithmetic is already integral; the
+       native safe-integer check keeps the common VM path compact. */
+    if (Number.isSafeInteger(a) && Number.isSafeInteger(b)) {
+        const r = a + b;
+        if (Number.isSafeInteger(r)) return r;
     }
     return wrap(toBigInt(a) + toBigInt(b));
 };
 
 const sub = function(a, b) {
-    if (isSafeNumber(a) && isSafeNumber(b)) {
-        let r = a - b;
-        if (r >= MIN_SAFE && r <= MAX_SAFE) return r;
+    if (Number.isSafeInteger(a) && Number.isSafeInteger(b)) {
+        const r = a - b;
+        if (Number.isSafeInteger(r)) return r;
     }
     return wrap(toBigInt(a) - toBigInt(b));
 };
 
 const mul = function(a, b) {
-    if (isSafeNumber(a) && isSafeNumber(b)) {
+    if (Number.isSafeInteger(a) && Number.isSafeInteger(b)) {
         /* Cheap overflow heuristic: if both magnitudes are small enough the
            product cannot leave the safe range, stay on the fast path. */
-        let aa = a < 0 ? -a : a;
-        let bb = b < 0 ? -b : b;
-        if (aa <= 0x200000 && bb <= 0x200000) {  /* ~2^21 * 2^21 < 2^42 << 2^53 */
+        const aa = a < 0 ? -a : a;
+        const bb = b < 0 ? -b : b;
+        if (aa <= 0x200000 && bb <= 0x200000)
             return a * b;
-        }
-        let r = a * b;
-        if (Number.isInteger(r) && r >= MIN_SAFE && r <= MAX_SAFE) return r;
+        const r = a * b;
+        if (Number.isSafeInteger(r)) return r;
     }
     return wrap(toBigInt(a) * toBigInt(b));
 };
 
 const neg = function(a) {
-    if (isSafeNumber(a)) {
-        let r = -a;
-        if (r >= MIN_SAFE && r <= MAX_SAFE) return r;
+    if (Number.isSafeInteger(a)) {
+        const r = -a;
+        if (Number.isSafeInteger(r)) return r;
     }
     return wrap(-toBigInt(a));
 };
