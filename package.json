@@ -2,8 +2,8 @@
   "name": "luanode-vm",
   "version": "1.0.0",
   "description": "High-performance Lua 5.3 Virtual Machine and runtime implemented in modern JavaScript (ES6+), engineered for seamless execution across Node.js and browser environments.",
-  "main": "src/fengari.js",
-  "module": "src/fengari.js",
+  "main": "src/luanode.js",
+  "module": "src/luanode.js",
   "type": "commonjs",
   "bin": {
     "luanode": "cli/luanode.js"
@@ -19,6 +19,7 @@
     "lint": "eslint src/ tests/ cli/",
     "lint:fix": "eslint --fix src/ tests/ cli/",
     "cli": "node cli/luanode.js",
+    "benchmark": "node cli/luanode.js bench/runtime.lua",
     "smoke": "node cli/luanode.js -e \"print('LuaNode-VM OK'); print(math.maxinteger); print(math.maxinteger + 1)\""
   },
   "keywords": [
