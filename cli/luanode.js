@@ -16,7 +16,6 @@
 */
 
 const fs = require("fs");
-const path = require("path");
 const F = require("../src/fengari.js");
 
 const { to_luastring, to_jsstring } = F;
@@ -95,8 +94,8 @@ function runFile(filePath, scriptArgs) {
     }
     lualib.luaL_openlibs(L);
 
-    /* Set up the arg table */
-    createArgTable(L, path.basename(filePath), scriptArgs);
+    /* Preserve the invoked script path in arg[0], as PUC-Rio Lua does. */
+    createArgTable(L, filePath, scriptArgs);
 
     const chunkName = "@" + filePath;
     const status = lauxlib.luaL_loadbuffer(L, to_luastring(code), to_luastring(chunkName));
