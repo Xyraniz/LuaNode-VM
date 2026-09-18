@@ -1,4 +1,4 @@
-<div align="center">
+<div align="center"> 
 <img src="logo.png" alt="LuaNode-VM logo" width="180" />
   <h1>LuaNode-VM</h1>
   <p><strong>A Lua 5.3 virtual machine and standard library implemented in JavaScript.</strong></p>
