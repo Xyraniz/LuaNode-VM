@@ -93,8 +93,10 @@ class global_State {
             tables: new Set(),
             allocationsSinceCollection: 0,
             instructionsSinceCollection: 0,
-            simulatedMemoryKb: 1,
+            baselineTableCount: 0,
             running: true,
+            pause: 200,
+            stepmul: 100,
             collecting: false,
             closed: false
         };

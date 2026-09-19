@@ -237,30 +237,28 @@ const luaB_collectgarbage = function(L) {
             lua_pushinteger(L, 0);
             return 1;
         case 3:  /* "count"     */
-            lua_pushnumber(L, ltable.luaH_memory(L));
-            return 1;  /* simulated Lua heap size in KB */
+            lua_pushnumber(L, ltable.luaH_memory(L) / 1024);
+            return 1;  /* estimated managed Lua table storage in KB */
         case 4:  /* "countb"    */
-            lua_pushinteger(L, 0);
-            return 1; /* remainder bytes */
+            lua_pushinteger(L, ltable.luaH_memory(L) % 1024);
+            return 1; /* remainder of the estimated table storage */
         case 5:  /* "step"      */
-            const stepSize = luaL_optinteger(L, 2, 0);
-            if (!ltable.luaH_isrunning(L) && stepSize > 0) {
-                const stoppedStepError = ltable.luaH_collectgarbage(L);
-                if (stoppedStepError) {
-                    if (stoppedStepError.ttisstring())
-                        lobject.pushobj2s(L, stoppedStepError);
-                    else
-                        lua_pushstring(L, to_luastring("error in __gc", true));
-                    return lua_error(L);
-                }
+            luaL_optinteger(L, 2, 0); /* validate the optional step count */
+            const stepError = ltable.luaH_collectgarbage(L);
+            if (stepError) {
+                if (stepError.ttisstring())
+                    lobject.pushobj2s(L, stepError);
+                else
+                    lua_pushstring(L, to_luastring("error in __gc", true));
+                return lua_error(L);
             }
             lua_pushboolean(L, 1);
-            return 1; /* one simulated step completes a cycle */
+            return 1; /* the deterministic pass completes in one step */
         case 6:  /* "setpause"  */
-            lua_pushinteger(L, 0);
+            lua_pushinteger(L, ltable.luaH_setpause(L, luaL_optinteger(L, 2, 0)));
             return 1;
         case 7:  /* "setstepmul"*/
-            lua_pushinteger(L, 0);
+            lua_pushinteger(L, ltable.luaH_setstepmul(L, luaL_optinteger(L, 2, 0)));
             return 1;
         case 8:  /* "isrunning" */
             lua_pushboolean(L, ltable.luaH_isrunning(L));

@@ -1,17 +1,27 @@
 "use strict";
 
-const { lua_pop } = require('./lua.js');
+const { lua_pop, lua_pushnil, lua_setglobal } = require('./lua.js');
 const { luaL_requiref } = require('./lauxlib.js');
 const { to_luastring } = require("./fengaricore.js");
 
 const loadedlibs = {};
+const minimalLibs = new Set(["_G", "coroutine", "math", "string", "table", "utf8"]);
 
 /* export before requiring lualib.js */
-const luaL_openlibs = function(L) {
+const luaL_openlibs = function(L, options) {
+    const hostAccess = !options || options.hostAccess !== false;
     /* "require" functions from 'loadedlibs' and set results to global table */
     for (let lib in loadedlibs) {
+        if (!hostAccess && !minimalLibs.has(lib)) continue;
         luaL_requiref(L, to_luastring(lib), loadedlibs[lib], 1);
         lua_pop(L, 1); /* remove lib */
+    }
+    if (!hostAccess) {
+        /* Base-library file loaders remain present without io/package. */
+        for (const name of ["dofile", "loadfile"]) {
+            lua_pushnil(L);
+            lua_setglobal(L, to_luastring(name));
+        }
     }
 };
 module.exports.luaL_openlibs = luaL_openlibs;

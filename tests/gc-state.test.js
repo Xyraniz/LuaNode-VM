@@ -51,6 +51,25 @@ describe("per-state table collector", () => {
         }
     });
 
+    test("GC pause and step multiplier are per-state settings", () => {
+        const first = newOpenState();
+        const second = newOpenState();
+        try {
+            expect(run(first,
+                "return tostring(collectgarbage('setpause', 150)) .. ':' .. " +
+                "tostring(collectgarbage('setstepmul', 250))", 1)).toBe("200:100");
+            expect(run(first,
+                "return tostring(collectgarbage('setpause', 300)) .. ':' .. " +
+                "tostring(collectgarbage('setstepmul', 350))", 1)).toBe("150:250");
+            expect(run(second,
+                "return tostring(collectgarbage('setpause', 400)) .. ':' .. " +
+                "tostring(collectgarbage('setstepmul', 450))", 1)).toBe("200:100");
+        } finally {
+            F.lua.lua_close(first);
+            F.lua.lua_close(second);
+        }
+    });
+
     test("closing a state runs table finalizers and releases its registry", () => {
         const L = newOpenState();
         const gc = L.l_G.gc;

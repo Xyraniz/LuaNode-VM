@@ -71,6 +71,20 @@ luanode [-h|--help] [-v|--version] [-e code] [script.lua [args...]]
 
 When a script file is used, the CLI preserves the invoked script path in Lua's argument table. Script arguments follow the path. With no arguments, the CLI prints its usage information rather than opening a REPL.
 
+## Library access and untrusted scripts
+
+The default `luaL_openlibs(L)` exposes the full standard-library set. In Node.js, this includes filesystem access through `io`, shell and process access through `os`, module loading through `package`, and VM inspection through `debug`. The CLI uses this full profile; scripts should be treated as trusted host code.
+
+An embedding that does not need those host interfaces can open the reduced library set:
+
+```js
+lualib.luaL_openlibs(L, { hostAccess: false });
+```
+
+This omits `io`, `os`, `package`, `debug`, and `fengari`, and removes `dofile` and `loadfile` from the base library. `print` remains available. This option reduces exposed capabilities; it is not a security sandbox and does not impose CPU or memory limits. Use process or OS isolation and resource limits for untrusted scripts.
+
+The Lua-level collector handles table reachability, weak table entries, and table finalizers. Its `collectgarbage("count")` value estimates managed table storage; it is not a measurement of the complete JavaScript heap. `collectgarbage("step")` runs one synchronous full pass.
+
 The package scripts provide equivalent shortcuts:
 
 ```bash
@@ -161,7 +175,7 @@ Run the benchmark:
 npm run benchmark
 ```
 
-The repository's checked test suite covers 155 tests across eight suites in the current checkout. The lint configuration currently reports warnings in the existing codebase but no lint errors; `npm run lint` is therefore useful for visibility without implying that the repository is warning-free.
+The checked test suite covers 182 tests across 13 suites. ESLint applies the shared source rules to `cli/` as well as `src/`; the existing codebase still reports warnings, while `npm run lint` exits successfully when there are no errors.
 
 ## Compatibility and boundaries
 

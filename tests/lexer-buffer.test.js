@@ -125,6 +125,26 @@ describe("collectgarbage", () => {
         expect(Number(r.value)).toBeGreaterThan(0);
     });
 
+    test("collectgarbage count and countb report the managed table estimate", () => {
+        const r = runLua(
+            "local bytes=collectgarbage('count')*1024+collectgarbage('countb'); " +
+            "return tostring(bytes > 0 and collectgarbage('countb') >= 0 and collectgarbage('countb') < 1024)"
+        );
+        expect(r.ok).toBe(true);
+        expect(r.value).toBe("true");
+    });
+
+    test("collectgarbage count drops after unreachable tables are collected", () => {
+        const r = runLua(
+            "collectgarbage('stop'); local before=collectgarbage('count'); " +
+            "do for i=1,100 do local t={i,{i}} end end; " +
+            "local allocated=collectgarbage('count'); collectgarbage('collect'); " +
+            "return tostring(allocated > before and collectgarbage('count') < allocated)"
+        );
+        expect(r.ok).toBe(true);
+        expect(r.value).toBe("true");
+    });
+
     test("collectgarbage('isrunning') returns true", () => {
         const r = runLua(`return collectgarbage("isrunning")`);
         expect(r.ok).toBe(true);
