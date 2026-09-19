@@ -23,12 +23,6 @@ const {
 } = require('../luaconf.js');
 const { lua_assert } = require('./llimits.js');
 const I64 = require('./lint64.js');
-const allTables = new Set();
-let allocationsSinceCollection = 0;
-let instructionsSinceCollection = 0;
-let simulatedMemoryKb = 1;
-let gcRunning = true;
-let collecting = false;
 const ldebug  = require('./ldebug.js');
 const lobject = require('./lobject.js');
 const {
@@ -130,7 +124,7 @@ class Table {
         this.finalized = false;
         this.finalizerPending = false;
         this.flags = ~0;
-        allTables.add(this);
+        L.l_G.gc.tables.add(this);
     }
 }
 
@@ -410,24 +404,31 @@ const needsDeferredFinalization = function(table) {
     return false;
 };
 
-const luaH_setrunning = function(running) {
-    gcRunning = !!running;
+const luaH_setrunning = function(L, running) {
+    L.l_G.gc.running = !!running;
 };
 
-const luaH_memory = function() {
-    return simulatedMemoryKb;
+const luaH_isrunning = function(L) {
+    return L.l_G.gc.running;
+};
+
+const luaH_memory = function(L) {
+    return L.l_G.gc.simulatedMemoryKb;
 };
 
 const luaH_maybe_gc = function(L) {
-    if (collecting || !gcRunning) return;
-    instructionsSinceCollection++;
-    if (instructionsSinceCollection >= 10000)
+    const gc = L.l_G.gc;
+    if (gc.collecting || !gc.running || gc.closed) return;
+    gc.instructionsSinceCollection++;
+    if (gc.instructionsSinceCollection >= 10000)
         luaH_collectgarbage(L);
 };
 
 const luaH_collectgarbage = function(L) {
-    if (collecting) return;
-    collecting = true;
+    const gc = L.l_G.gc;
+    const allTables = gc.tables;
+    if (gc.collecting || gc.closed) return;
+    gc.collecting = true;
     const marked = new Set();
     const visitedTables = new Set();
     let firstFinalizerError = null;
@@ -637,15 +638,58 @@ const luaH_collectgarbage = function(L) {
             if (!marked.has(table) && !table.finalizerPending)
                 allTables.delete(table);
         }
-        simulatedMemoryKb = Math.max(1, visitedTables.size);
+        gc.simulatedMemoryKb = Math.max(1, visitedTables.size);
         return firstFinalizerError;
     } finally {
-        allocationsSinceCollection = 0;
-        instructionsSinceCollection = 0;
-        collecting = false;
+        gc.allocationsSinceCollection = 0;
+        gc.instructionsSinceCollection = 0;
+        gc.collecting = false;
         if (typeof console !== "undefined" &&
             typeof process !== "undefined" && process.env.LUANODE_GC_DEBUG)
             console.error("GC_END", allTables.size, visitedTables.size);
+    }
+};
+
+/*
+** Release the VM-owned table graph when its main state closes. Lua finalizers
+** still run while the stack and registry are available; afterward all roots
+** and collector bookkeeping are detached from the state.
+*/
+const luaH_close = function(L) {
+    const gc = L.l_G.gc;
+    if (gc.closed) return;
+    gc.collecting = true;
+    const lapi = require('./lapi.js');
+    const gcName = luaS_bless(L, to_luastring("__gc", true));
+
+    try {
+        const finalizableTables = Array.from(gc.tables).reverse();
+        for (const table of finalizableTables) {
+            if (table.finalized || !table.metatable) continue;
+            const finalizer = luaH_getstr(table.metatable, gcName);
+            if (!finalizer.ttisfunction()) continue;
+
+            table.finalized = true;
+            table.finalizerPending = false;
+            const base = L.top;
+            lobject.pushobj2s(L, finalizer);
+            lobject.pushobj2s(L, new lobject.TValue(LUA_TTABLE, table));
+            try {
+                lapi.lua_pcall(L, 1, 0, 0);
+            } catch (error) {
+                L.status = 0;
+            } finally {
+                L.top = base;
+            }
+        }
+    } finally {
+        gc.tables.clear();
+        gc.allocationsSinceCollection = 0;
+        gc.instructionsSinceCollection = 0;
+        gc.simulatedMemoryKb = 1;
+        gc.running = false;
+        gc.collecting = false;
+        gc.closed = true;
     }
 };
 
@@ -721,17 +765,21 @@ module.exports.luaH_getint  = luaH_getint;
 module.exports.luaH_getn    = luaH_getn;
 module.exports.luaH_getstr  = luaH_getstr;
 module.exports.luaH_collectgarbage = luaH_collectgarbage;
+module.exports.luaH_close = luaH_close;
 module.exports.luaH_maybe_gc = luaH_maybe_gc;
 module.exports.luaH_setrunning = luaH_setrunning;
+module.exports.luaH_isrunning = luaH_isrunning;
 module.exports.luaH_memory = luaH_memory;
 module.exports.luaH_setfrom = luaH_setfrom;
 module.exports.luaH_setint  = luaH_setint;
 module.exports.luaH_setmeta = luaH_setmode;
 module.exports.luaH_new     = function(L) {
+    const gc = L.l_G.gc;
+    if (gc.closed) throw new Error("cannot allocate a Lua table after lua_close");
     const table = new Table(L);
-    simulatedMemoryKb++;
-    allocationsSinceCollection++;
-    if (!collecting && gcRunning && allocationsSinceCollection >= 100) {
+    gc.simulatedMemoryKb++;
+    gc.allocationsSinceCollection++;
+    if (!gc.collecting && gc.running && gc.allocationsSinceCollection >= 100) {
         try {
             luaH_collectgarbage(L);
         } catch (e) {

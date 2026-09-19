@@ -112,7 +112,7 @@ describe("Lexer token-buffer growth (the 32-byte crash bug)", () => {
     });
 });
 
-describe("collectgarbage (was: lua_gc not implemented)", () => {
+describe("collectgarbage", () => {
     test("collectgarbage('collect') returns 0 and does not raise", () => {
         const r = runLua(`return collectgarbage("collect")`);
         expect(r.ok).toBe(true);
@@ -122,9 +122,7 @@ describe("collectgarbage (was: lua_gc not implemented)", () => {
     test("collectgarbage('count') returns a number", () => {
         const r = runLua(`return collectgarbage("count")`);
         expect(r.ok).toBe(true);
-        /* count returns KB as a float; stringifyValue uses tolstring which
-           renders 0 as "0.0". Accept either form. */
-        expect(["0", "0.0"]).toContain(r.value);
+        expect(Number(r.value)).toBeGreaterThan(0);
     });
 
     test("collectgarbage('isrunning') returns true", () => {

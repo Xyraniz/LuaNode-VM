@@ -204,17 +204,9 @@ const luaB_rawset = function(L) {
     return 1;
 };
 
-let gcRunning = true;
-
 const hostGc = (typeof globalThis !== "undefined" && typeof globalThis.gc === "function")
     ? globalThis.gc.bind(globalThis)
     : null;
-const hostMemoryInKb = function() {
-    if (hostGc && typeof process !== "undefined" && process.memoryUsage) {
-        return process.memoryUsage().heapUsed / 1024;
-    }
-    return 0;
-};
 
 const opts = [
     "stop", "restart", "collect",
@@ -223,21 +215,14 @@ const opts = [
 ].map((e) => to_luastring(e));
 const luaB_collectgarbage = function(L) {
     let o = luaL_checkoption(L, 1, "collect", opts);
-    /* LuaNode-VM delegates object reclamation to the host JavaScript
-       garbage collector (V8/SpiderMonkey/etc.), so there is no separate
-       Lua-level collector to drive. We therefore implement every option
-       as a benign no-op that returns the values mandated by the Lua 5.3
-       reference manual, instead of raising "lua_gc not implemented" â
-       which broke any script that called collectgarbage() (a very common
-       idiom, e.g. between benchmark phases or in test suites). */
+    /* LuaNode maintains a per-state Lua-level pass for weak references and
+       table finalizers. The host collector remains optional and process-wide. */
     switch (o) {
         case 0:  /* "stop"      */
-            gcRunning = false;
-            ltable.luaH_setrunning(false);
+            ltable.luaH_setrunning(L, false);
             return 0;
         case 1:  /* "restart"   */
-            gcRunning = true;
-            ltable.luaH_setrunning(true);
+            ltable.luaH_setrunning(L, true);
             return 0;
         case 2:  /* "collect"   */
             const gcError = ltable.luaH_collectgarbage(L);
@@ -252,14 +237,14 @@ const luaB_collectgarbage = function(L) {
             lua_pushinteger(L, 0);
             return 1;
         case 3:  /* "count"     */
-            lua_pushnumber(L, hostGc ? ltable.luaH_memory() : 0);
+            lua_pushnumber(L, ltable.luaH_memory(L));
             return 1;  /* simulated Lua heap size in KB */
         case 4:  /* "countb"    */
-            lua_pushinteger(L, hostGc ? 0 : 0);
+            lua_pushinteger(L, 0);
             return 1; /* remainder bytes */
         case 5:  /* "step"      */
             const stepSize = luaL_optinteger(L, 2, 0);
-            if (!gcRunning && stepSize > 0) {
+            if (!ltable.luaH_isrunning(L) && stepSize > 0) {
                 const stoppedStepError = ltable.luaH_collectgarbage(L);
                 if (stoppedStepError) {
                     if (stoppedStepError.ttisstring())
@@ -278,7 +263,7 @@ const luaB_collectgarbage = function(L) {
             lua_pushinteger(L, 0);
             return 1;
         case 8:  /* "isrunning" */
-            lua_pushboolean(L, gcRunning);
+            lua_pushboolean(L, ltable.luaH_isrunning(L));
             return 1;
         default:
             return 0;

@@ -89,6 +89,15 @@ class global_State {
         this.version = null;
         this.tmname = new Array(ltm.TMS.TM_N);
         this.mt = new Array(LUA_NUMTAGS);
+        this.gc = {
+            tables: new Set(),
+            allocationsSinceCollection: 0,
+            instructionsSinceCollection: 0,
+            simulatedMemoryKb: 1,
+            running: true,
+            collecting: false,
+            closed: false
+        };
     }
 
 }
@@ -180,7 +189,11 @@ const lua_newstate = function() {
 };
 
 const close_state = function(L) {
+    ltable.luaH_close(L);
+    L.l_G.l_registry = new lobject.TValue(LUA_TNIL, null);
+    L.l_G.mt.fill(null);
     freestack(L);
+    L.l_G.mainthread = null;
 };
 
 const lua_close = function(L) {
