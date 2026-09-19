@@ -22,6 +22,15 @@ describe("table.sort numeric fast path", () => {
             .toBe("1,2,2.25,3.5");
     });
 
+    test("orders adjacent int64 and float values without rounding", () => {
+        expect(run(
+            "local t = {9007199254740993, 9007199254740992.0, 9007199254740994.0}; " +
+            "table.sort(t); " +
+            "return tostring(t[1] == 9007199254740992.0) .. ':' .. " +
+            "tostring(t[2] == 9007199254740993) .. ':' .. tostring(t[3] == 9007199254740994.0)"
+        )).toBe("true:true:true");
+    });
+
     test("preserves custom comparator semantics", () => {
         expect(run(
             "local calls = 0; " +

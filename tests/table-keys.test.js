@@ -21,6 +21,17 @@ describe("Tables with large integer keys", () => {
         expect(r.value).toBe("42");
     });
 
+    test("maxinteger and the float 2^63 remain distinct keys", () => {
+        const r = runLua(
+            "local t = {};" +
+            "t[math.maxinteger] = 'max';" +
+            "t[9223372036854775808.0] = 'float';" +
+            "return t[math.maxinteger] .. ':' .. t[9223372036854775808.0] .. ':' .. tostring(math.maxinteger == 9223372036854775808.0)"
+        );
+        expect(r.ok).toBe(true);
+        expect(r.value).toBe("max:float:false");
+    });
+
     test("Store and retrieve mininteger key", () => {
         const r = runLua("local t = {}; t[-9223372036854775808] = 'min'; return t[-9223372036854775808 + 0]");
         expect(r.ok).toBe(true);

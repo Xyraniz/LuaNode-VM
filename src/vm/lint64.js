@@ -60,8 +60,9 @@ const MIN_SAFE    = Number.MIN_SAFE_INTEGER;   /* -2^53 + 1 */
 ** We accept both plain Numbers that are integral and BigInts.
 */
 const isIntRep = function(v) {
-    if (typeof v === "bigint") return true;
-    return typeof v === "number" && Number.isInteger(v);
+    if (typeof v === "bigint") return v >= MIN_INT64 && v <= MAX_INT64;
+    return typeof v === "number" && Number.isInteger(v) &&
+        v >= -9223372036854775808 && v < 9223372036854775808;
 };
 
 /*
@@ -105,6 +106,10 @@ const normalize = function(v) {
     }
     if (typeof v === "number") {
         if (!Number.isInteger(v)) return null;
+        /* 2^63 is representable as a Number but is outside signed int64.
+           Reject it before toFixed(), which uses exponential notation for
+           sufficiently large magnitudes and cannot be passed to BigInt. */
+        if (v < -9223372036854775808 || v >= 9223372036854775808) return null;
         if (v >= MIN_SAFE && v <= MAX_SAFE) return v;
         /* A Number outside the safe range but still integral: promote to
            BigInt via the exact decimal string to avoid double rounding. */
@@ -267,6 +272,31 @@ const le = function(a, b) {
     return a <= b;
 };
 
+/* Mixed Lua integer/float comparisons. BigInt relational operators compare
+   against Number without first rounding the integer to a double; guard the
+   equality conversion because fractional values, NaN, and infinities cannot
+   be converted to BigInt. */
+const eqIntFloat = function(integer, float) {
+    if (!Number.isFinite(float) || !Number.isInteger(float)) return false;
+    return toBigInt(integer) === BigInt(float);
+};
+
+const ltIntFloat = function(integer, float) {
+    return toBigInt(integer) < float;
+};
+
+const leIntFloat = function(integer, float) {
+    return toBigInt(integer) <= float;
+};
+
+const ltFloatInt = function(float, integer) {
+    return float < toBigInt(integer);
+};
+
+const leFloatInt = function(float, integer) {
+    return float <= toBigInt(integer);
+};
+
 /* ---- conversions ---------------------------------------------------- */
 
 /*
@@ -384,7 +414,7 @@ module.exports = {
     /* bitwise / shift */
     band, bor, bxor, bnot, shiftl, shiftr, ult,
     /* comparison */
-    eq, lt, le,
+    eq, lt, le, eqIntFloat, ltIntFloat, leIntFloat, ltFloatInt, leFloatInt,
     /* conversions */
     fromFloat, fromDecimalString, fromHexString
 };

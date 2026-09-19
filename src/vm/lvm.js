@@ -762,12 +762,9 @@ const luaV_equalobj = function(L, t1, t2) {
         if (t1.ttnov() !== t2.ttnov() || t1.ttnov() !== LUA_TNUMBER)
             return 0; /* only numbers can be equal with different variants */
         else { /* two numbers with different variants (int vs float) */
-            /* PUC-Rio converts the integer to lua_Number for a mixed
-               comparison, so a rounded float such as 2^63 compares equal to
-               math.maxinteger. */
             return (t1.ttisinteger()
-                ? I64.toFloat(t1.value) === t2.value
-                : t1.value === I64.toFloat(t2.value)) ? 1 : 0;
+                ? I64.eqIntFloat(t1.value, t2.value)
+                : I64.eqIntFloat(t2.value, t1.value)) ? 1 : 0;
         }
     }
 
@@ -902,14 +899,15 @@ const tonumber = function(o) {
 
 /*
 ** Return 'l < r', for numbers.
-** Integers may be stored as BigInt (outside the safe range) or as Number;
-** JS comparison operators order Number and BigInt correctly, but to be
-** explicit and robust we route through lint64 when either side is a
-** hybrid integer. Floats compare with the native operator.
+** Integers may be stored as BigInt (outside the safe range) or as Number.
+** Mixed comparisons must preserve integer precision and accept fractional,
+** infinite, and NaN floats without attempting to convert them to BigInt.
 */
 const LTnum = function(l, r) {
-    if (typeof l.value === "bigint" || typeof r.value === "bigint")
-        return I64.lt(l.value, r.value);
+    if (l.ttisinteger() && r.ttisfloat())
+        return I64.ltIntFloat(l.value, r.value);
+    if (l.ttisfloat() && r.ttisinteger())
+        return I64.ltFloatInt(l.value, r.value);
     return l.value < r.value;
 };
 
@@ -918,11 +916,9 @@ const LTnum = function(l, r) {
 */
 const LEnum = function(l, r) {
     if (l.ttisinteger() && r.ttisfloat())
-        return I64.toFloat(l.value) <= r.value;
+        return I64.leIntFloat(l.value, r.value);
     if (l.ttisfloat() && r.ttisinteger())
-        return l.value <= I64.toFloat(r.value);
-    if (typeof l.value === "bigint" || typeof r.value === "bigint")
-        return I64.le(l.value, r.value);
+        return I64.leFloatInt(l.value, r.value);
     return l.value <= r.value;
 };
 

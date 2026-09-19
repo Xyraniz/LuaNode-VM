@@ -49,6 +49,7 @@ const { LUAI_MAXSTACK } = require('../luaconf.js');
 const lvm       = require('./lvm.js');
 const ltable    = require('./ltable.js');
 const { ZIO } = require('./lzio.js');
+const I64       = require('./lint64.js');
 const TValue    = lobject.TValue;
 const CClosure  = lobject.CClosure;
 
@@ -77,8 +78,7 @@ const fengari_argcheckinteger = function(n) {
     ** true int64 extremes (2^63-1 / -2^63), which are BigInts in the
     ** hybrid representation. lint64.isIntRep covers both cases.
     */
-    const { isIntRep } = require('./lint64.js');
-    fengari_argcheck(isIntRep(n));
+    fengari_argcheck(I64.isIntRep(n));
 };
 
 const isvalid = function(o) {
@@ -278,7 +278,7 @@ const lua_pushnumber = function(L, n) {
 
 const lua_pushinteger = function(L, n) {
     fengari_argcheckinteger(n);
-    L.stack[L.top] = new TValue(LUA_TNUMINT, n);
+    L.stack[L.top] = new TValue(LUA_TNUMINT, I64.normalize(n));
     api_incr_top(L);
 };
 

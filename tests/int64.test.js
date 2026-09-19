@@ -205,6 +205,21 @@ describe("Integer comparison and equality", () => {
     test("maxinteger > maxinteger - 1", () => {
         expect(evalStr("tostring(math.maxinteger > math.maxinteger - 1)").value).toBe("true");
     });
+
+    test("mixed integer/float equality does not round int64 to binary64", () => {
+        expect(evalStr("tostring(9007199254740993 == 9007199254740992.0)").value).toBe("false");
+        expect(evalStr("tostring(math.maxinteger == 9223372036854775808.0)").value).toBe("false");
+        expect(evalStr("tostring(9007199254740992 == 9007199254740992.0)").value).toBe("true");
+    });
+
+    test("mixed integer/float ordering handles fractions, infinities and NaN", () => {
+        expect(evalStr("tostring(math.maxinteger < 1.5)").value).toBe("false");
+        expect(evalStr("tostring(math.maxinteger <= 1.5)").value).toBe("false");
+        expect(evalStr("tostring(-1.5 < math.mininteger)").value).toBe("false");
+        expect(evalStr("tostring(math.mininteger < math.huge)").value).toBe("true");
+        expect(evalStr("tostring(math.mininteger < 0/0)").value).toBe("false");
+        expect(evalStr("tostring(math.maxinteger <= math.huge)").value).toBe("true");
+    });
 });
 
 describe("For loops with large integer ranges", () => {

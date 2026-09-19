@@ -408,7 +408,7 @@ const isSimpleLessComparator = function(L) {
 ** Compare two numeric TValue values without entering the Lua VM. This is
 ** equivalent to Lua 5.3's numeric '<' for the default table.sort path:
 ** integer/integer comparisons stay exact, while mixed integer/float values
-** use the same integer-to-float conversion as the regular VM path.
+** use exact comparisons without rounding int64 values to binary64.
 */
 const numericLess = function(a, b) {
     if (a.ttisinteger() && b.ttisinteger())
@@ -416,8 +416,8 @@ const numericLess = function(a, b) {
     if (a.ttisfloat() && b.ttisfloat())
         return a.value < b.value;
     return a.ttisinteger()
-        ? I64.toFloat(a.value) < b.value
-        : a.value < I64.toFloat(b.value);
+        ? I64.ltIntFloat(a.value, b.value)
+        : I64.ltFloatInt(a.value, b.value);
 };
 
 /*

@@ -52,13 +52,7 @@ const get_lightuserdata_hash = function(v) {
 };
 
 const float_key_integer = function(n) {
-    const asInt = I64.fromFloat(n, 0);
-    if (asInt !== null) return asInt;
-    /* Number(math.maxinteger) rounds to 2^63, but Lua compares that
-       float equal to the largest signed integer. */
-    if (n === Math.pow(2, 63)) return I64.MAX_INT64;
-    if (n === -Math.pow(2, 63)) return I64.MIN_INT64;
-    return null;
+    return I64.fromFloat(n, 0);
 };
 
 const table_hash = function(L, key) {
@@ -291,8 +285,9 @@ const getgeneric = function(t, hash) {
 };
 
 const luaH_getint = function(t, key) {
-    lua_assert(typeof key == "number" && Number.isInteger(key));
-    return getgeneric(t, key);
+    const integerKey = I64.normalize(key);
+    lua_assert(integerKey !== null);
+    return getgeneric(t, integerKey);
 };
 
 const luaH_getstr = function(t, key) {
@@ -308,8 +303,9 @@ const luaH_get = function(L, t, key) {
 };
 
 const luaH_setint = function(t, key, value) {
-    lua_assert(typeof key == "number" && Number.isInteger(key) && value instanceof lobject.TValue);
-    let hash = key; /* table_hash known result */
+    const integerKey = I64.normalize(key);
+    lua_assert(integerKey !== null && value instanceof lobject.TValue);
+    let hash = integerKey; /* table_hash known result */
     if (value.ttisnil()) {
         mark_dead(t, hash);
         return;
