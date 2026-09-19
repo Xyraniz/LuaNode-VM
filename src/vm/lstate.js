@@ -91,9 +91,10 @@ class global_State {
         this.mt = new Array(LUA_NUMTAGS);
         this.gc = {
             tables: new Set(),
+            userdatas: new Set(),
             allocationsSinceCollection: 0,
             instructionsSinceCollection: 0,
-            baselineTableCount: 0,
+            baselineObjectCount: 0,
             running: true,
             pause: 200,
             stepmul: 100,

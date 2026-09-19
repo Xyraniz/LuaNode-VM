@@ -20,7 +20,7 @@ const run = (L, source, nresults = 0) => {
     return result;
 };
 
-describe("per-state table collector", () => {
+describe("per-state Lua object collector", () => {
     test("collecting one state preserves weak tables owned by another", () => {
         const first = newOpenState();
         const second = newOpenState();
@@ -70,7 +70,37 @@ describe("per-state table collector", () => {
         }
     });
 
-    test("closing a state runs table finalizers and releases its registry", () => {
+    test("collecting unreachable userdata runs its finalizer exactly once", () => {
+        const L = newOpenState();
+        const gc = L.l_G.gc;
+        const finalized = { count: 0 };
+        const before = new Set(gc.userdatas);
+        try {
+            F.lua.lua_newuserdata(L, 0);
+            F.lua.lua_newtable(L);
+            F.lua.lua_pushcfunction(L, () => {
+                finalized.count++;
+                return 0;
+            });
+            F.lua.lua_setfield(L, -2, F.to_luastring("__gc"));
+            F.lua.lua_setmetatable(L, -2);
+            const userdata = Array.from(gc.userdatas).find((item) => !before.has(item));
+            expect(userdata).toBeDefined();
+
+            F.lua.lua_settop(L, 0);
+            run(L, "collectgarbage('collect')");
+            expect(finalized.count).toBe(1);
+            expect(userdata.finalized).toBe(true);
+            expect(gc.userdatas.has(userdata)).toBe(false);
+
+            run(L, "collectgarbage('collect')");
+            expect(finalized.count).toBe(1);
+        } finally {
+            F.lua.lua_close(L);
+        }
+    });
+
+    test("closing a state runs table and userdata finalizers and releases its registry", () => {
         const L = newOpenState();
         const gc = L.l_G.gc;
         const finalized = { count: 0 };
@@ -82,11 +112,22 @@ describe("per-state table collector", () => {
         run(L, "do local object = setmetatable({}, {__gc=function() mark_finalized() end}) end");
         expect(gc.tables.size).toBeGreaterThan(0);
 
+        F.lua.lua_newuserdata(L, 0);
+        F.lua.lua_newtable(L);
+        F.lua.lua_pushcfunction(L, () => {
+            finalized.count++;
+            return 0;
+        });
+        F.lua.lua_setfield(L, -2, F.to_luastring("__gc"));
+        F.lua.lua_setmetatable(L, -2);
+        F.lua.lua_settop(L, 0);
+
         F.lua.lua_close(L);
 
-        expect(finalized.count).toBe(1);
+        expect(finalized.count).toBe(2);
         expect(gc.closed).toBe(true);
         expect(gc.tables.size).toBe(0);
+        expect(gc.userdatas.size).toBe(0);
         expect(L.l_G.l_registry.ttisnil()).toBe(true);
         expect(L.stack).toBeNull();
     });

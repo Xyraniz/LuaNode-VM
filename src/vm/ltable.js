@@ -420,6 +420,7 @@ const luaH_memory = function(L) {
             bytes += 64; /* approximate key/value and ordered-entry storage */
         bytes += table.dead_strong.size * 32;
     }
+    bytes += L.l_G.gc.userdatas.size * 80; /* userdata header and uservalue */
     return bytes;
 };
 
@@ -443,7 +444,7 @@ const luaH_maybe_gc = function(L) {
     gc.instructionsSinceCollection++;
     const stepMultiplier = Math.max(0, gc.stepmul) / 100;
     const instructionThreshold = Math.max(10000,
-        Math.floor(Math.max(1, gc.tables.size) * 1000 * stepMultiplier));
+        Math.floor(Math.max(1, gc.tables.size + gc.userdatas.size) * 1000 * stepMultiplier));
     if (gc.instructionsSinceCollection >= instructionThreshold)
         luaH_collectgarbage(L);
 };
@@ -451,6 +452,7 @@ const luaH_maybe_gc = function(L) {
 const luaH_collectgarbage = function(L) {
     const gc = L.l_G.gc;
     const allTables = gc.tables;
+    const allUserdata = gc.userdatas;
     if (gc.collecting || gc.closed) return;
     gc.collecting = true;
     const marked = new Set();
@@ -646,6 +648,40 @@ const luaH_collectgarbage = function(L) {
             }
         }
 
+        const finalizableUserdata = Array.from(allUserdata).reverse();
+        for (const userdata of finalizableUserdata) {
+            if (marked.has(userdata) || userdata.finalized || !userdata.metatable) continue;
+            const finalizer = luaH_getstr(userdata.metatable, gcName);
+            if (!finalizer.ttisfunction()) continue;
+            if (userdata.metatable.weakMode.indexOf("v") !== -1 &&
+                !marked.has(finalizer.value))
+                continue;
+            userdata.finalized = true;
+            const base = L.top;
+            lobject.pushobj2s(L, finalizer);
+            lobject.pushobj2s(L, new lobject.TValue(LUA_TUSERDATA, userdata));
+            if (L.ci.callstatus & lstate.CIST_LUA) {
+                try {
+                    ldo.luaD_callnoyield(L, base, 0);
+                } catch (error) {
+                    /* Automatic finalizer errors are isolated from the mutator. */
+                    L.top = base;
+                    L.status = 0;
+                }
+            } else {
+                const status = lapi.lua_pcall(L, 1, 0, 0);
+                if (status !== 0) {
+                    if (!firstFinalizerError) {
+                        const errorValue = L.stack[L.top - 1];
+                        firstFinalizerError = errorValue
+                            ? new lobject.TValue(errorValue.type, errorValue.value)
+                            : new lobject.TValue(LUA_TNIL, null);
+                    }
+                    L.top = base;
+                }
+            }
+        }
+
         for (const table of allTables) {
             for (let entry = table.f; entry;) {
                 const next = entry.n;
@@ -662,7 +698,11 @@ const luaH_collectgarbage = function(L) {
             if (!marked.has(table) && !table.finalizerPending)
                 allTables.delete(table);
         }
-        gc.baselineTableCount = allTables.size;
+        for (const userdata of allUserdata) {
+            if (!marked.has(userdata))
+                allUserdata.delete(userdata);
+        }
+        gc.baselineObjectCount = allTables.size + allUserdata.size;
         return firstFinalizerError;
     } finally {
         gc.allocationsSinceCollection = 0;
@@ -675,7 +715,7 @@ const luaH_collectgarbage = function(L) {
 };
 
 /*
-** Release the VM-owned table graph when its main state closes. Lua finalizers
+** Release the VM-owned Lua object graph when its main state closes. Finalizers
 ** still run while the stack and registry are available; afterward all roots
 ** and collector bookkeeping are detached from the state.
 */
@@ -706,11 +746,30 @@ const luaH_close = function(L) {
                 L.top = base;
             }
         }
+        const finalizableUserdata = Array.from(gc.userdatas).reverse();
+        for (const userdata of finalizableUserdata) {
+            if (userdata.finalized || !userdata.metatable) continue;
+            const finalizer = luaH_getstr(userdata.metatable, gcName);
+            if (!finalizer.ttisfunction()) continue;
+
+            userdata.finalized = true;
+            const base = L.top;
+            lobject.pushobj2s(L, finalizer);
+            lobject.pushobj2s(L, new lobject.TValue(LUA_TUSERDATA, userdata));
+            try {
+                lapi.lua_pcall(L, 1, 0, 0);
+            } catch (error) {
+                L.status = 0;
+            } finally {
+                L.top = base;
+            }
+        }
     } finally {
         gc.tables.clear();
+        gc.userdatas.clear();
         gc.allocationsSinceCollection = 0;
         gc.instructionsSinceCollection = 0;
-        gc.baselineTableCount = 0;
+        gc.baselineObjectCount = 0;
         gc.running = false;
         gc.collecting = false;
         gc.closed = true;
@@ -806,7 +865,7 @@ module.exports.luaH_new     = function(L) {
     gc.allocationsSinceCollection++;
     const growthRatio = Math.max(0, gc.pause - 100) / 100;
     const allocationThreshold = Math.max(100,
-        Math.floor(gc.baselineTableCount * growthRatio));
+        Math.floor(gc.baselineObjectCount * growthRatio));
     if (!gc.collecting && gc.running &&
         gc.allocationsSinceCollection >= allocationThreshold) {
         try {

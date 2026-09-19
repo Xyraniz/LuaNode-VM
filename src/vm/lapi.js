@@ -537,7 +537,11 @@ const lua_createtable = function(L, narray, nrec) {
 };
 
 const luaS_newudata = function(L, size) {
-    return new lobject.Udata(L, size);
+    if (L.l_G.gc.closed)
+        throw new Error("cannot allocate Lua userdata after lua_close");
+    const userdata = new lobject.Udata(L, size);
+    L.l_G.gc.allocationsSinceCollection++;
+    return userdata;
 };
 
 const lua_newuserdata = function(L, size) {

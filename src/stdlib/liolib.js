@@ -149,7 +149,7 @@ const f_close = function(L) {
 
 const f_gc = function(L) {
     const p = tolstream(L);
-    if (!isclosed(p)) {
+    if (!isclosed(p) && p.closef !== io_noclose) {
         try { close_file(p); } catch (e) {}
     }
     return 0;

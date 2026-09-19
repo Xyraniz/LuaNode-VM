@@ -54,6 +54,29 @@ describe("Lua file I/O", () => {
         expect(result.value).toBe("one:two:true");
     });
 
+    test("unreachable io.tmpfile userdata closes and removes its temporary file", () => {
+        const directories = [];
+        const originalMkdtemp = fs.mkdtempSync.bind(fs);
+        const mkdtempSpy = jest.spyOn(fs, "mkdtempSync").mockImplementation((prefix) => {
+            const directory = originalMkdtemp(prefix);
+            directories.push(directory);
+            return directory;
+        });
+        const closeSpy = jest.spyOn(fs, "closeSync");
+        try {
+            const result = runLua("do local f=assert(io.tmpfile()); f:write('data') end");
+            expect(result.ok).toBe(true);
+            expect(directories).toHaveLength(1);
+            expect(fs.existsSync(directories[0])).toBe(false);
+            expect(closeSpy).toHaveBeenCalledTimes(1);
+        } finally {
+            closeSpy.mockRestore();
+            mkdtempSpy.mockRestore();
+            for (const directory of directories)
+                fs.rmSync(directory, { recursive: true, force: true });
+        }
+    });
+
     test("close still releases the descriptor when flushing fails", () => {
         const directory = fs.mkdtempSync(path.join(os.tmpdir(), "luanode-close-"));
         const filename = path.join(directory, "buffered.txt");

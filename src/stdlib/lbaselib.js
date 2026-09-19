@@ -216,7 +216,7 @@ const opts = [
 const luaB_collectgarbage = function(L) {
     let o = luaL_checkoption(L, 1, "collect", opts);
     /* LuaNode maintains a per-state Lua-level pass for weak references and
-       table finalizers. The host collector remains optional and process-wide. */
+       object finalizers. The host collector remains optional and process-wide. */
     switch (o) {
         case 0:  /* "stop"      */
             ltable.luaH_setrunning(L, false);
@@ -238,10 +238,10 @@ const luaB_collectgarbage = function(L) {
             return 1;
         case 3:  /* "count"     */
             lua_pushnumber(L, ltable.luaH_memory(L) / 1024);
-            return 1;  /* estimated managed Lua table storage in KB */
+            return 1;  /* estimated managed Lua object storage in KB */
         case 4:  /* "countb"    */
             lua_pushinteger(L, ltable.luaH_memory(L) % 1024);
-            return 1; /* remainder of the estimated table storage */
+            return 1; /* remainder of the estimated Lua object storage */
         case 5:  /* "step"      */
             luaL_optinteger(L, 2, 0); /* validate the optional step count */
             const stepError = ltable.luaH_collectgarbage(L);

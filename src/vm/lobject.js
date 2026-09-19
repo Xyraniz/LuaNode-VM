@@ -329,8 +329,10 @@ class Udata {
 
         this.metatable = null;
         this.uservalue = new TValue(LUA_TNIL, null);
+        this.finalized = false;
         this.len = size;
         this.data = Object.create(null); // ignores size argument
+        L.l_G.gc.userdatas.add(this);
     }
 
 }
