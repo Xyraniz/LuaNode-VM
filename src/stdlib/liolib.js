@@ -1,6 +1,8 @@
 "use strict";
 
 const fs      = require('fs');
+const os      = require('os');
+const path    = require('path');
 
 const {
     LUA_REGISTRYINDEX,
@@ -106,10 +108,19 @@ const newprefile = function(L) {
 const close_file = function(p) {
     if (!p || p.closef === null) return false;
     const f = p.f;
+    let closeError = null;
     try {
         if (f) flush_buffer(f);
-        if (f && typeof f.fd === "number" && f.fd >= 0)
+    } catch (e) {
+        closeError = e;
+    }
+    try {
+        if (f && typeof f.fd === "number" && f.fd >= 0) {
             fs.closeSync(f.fd);
+            f.fd = -1;
+        }
+    } catch (e) {
+        if (!closeError) closeError = e;
     } finally {
         if (f && f.temporary && f.path) {
             try { fs.unlinkSync(f.path); } catch (e) {}
@@ -118,6 +129,7 @@ const close_file = function(p) {
         p.closef = null;
         p.f = null;
     }
+    if (closeError) throw closeError;
     return true;
 };
 
@@ -127,13 +139,19 @@ const f_close = function(L) {
         return luaL_error(L, to_luastring("file is already closed"));
     if (p.closef === io_noclose)
         return io_noclose(L);
-    close_file(p);
-    return luaL_fileresult(L, true, null, null);
+    try {
+        close_file(p);
+        return luaL_fileresult(L, true, null, null);
+    } catch (e) {
+        return luaL_fileresult(L, false, null, e);
+    }
 };
 
 const f_gc = function(L) {
     const p = tolstream(L);
-    if (!isclosed(p)) close_file(p);
+    if (!isclosed(p)) {
+        try { close_file(p); } catch (e) {}
+    }
     return 0;
 };
 
@@ -153,6 +171,8 @@ const flush_buffer = function(f) {
 };
 
 const write_file_data = function(f, data) {
+    f.readBuffer = Buffer.alloc(0);
+    f.readBufferOffset = 0;
     if (!f.bufferMode || f.bufferMode === "no") {
         const position = f.append ? null : (f.positionable ? f.position : null);
         const written = fs.writeSync(f.fd, data, 0, data.length, position);
@@ -199,7 +219,9 @@ const io_open = function(L) {
             bufferMode: "no",
             bufferSize: 8192,
             buffer: [],
-            bufferLength: 0
+            bufferLength: 0,
+            readBuffer: Buffer.alloc(0),
+            readBufferOffset: 0
         };
         p.closef = f_close;
         return 1;
@@ -210,13 +232,30 @@ const io_open = function(L) {
     }
 };
 
+const fill_read_buffer = function(f) {
+    if (!f.readBuffer) {
+        f.readBuffer = Buffer.alloc(0);
+        f.readBufferOffset = 0;
+    }
+    if (f.readBufferOffset < f.readBuffer.length) return true;
+
+    const chunk = Buffer.alloc(4096);
+    const n = fs.readSync(f.fd, chunk, 0, chunk.length, f.positionable ? f.position : null);
+    f.readBuffer = chunk.subarray(0, n);
+    f.readBufferOffset = 0;
+    return n > 0;
+};
+
 const read_bytes = function(f, count) {
     if (count <= 0) return new Uint8Array(0);
     const out = Buffer.alloc(count);
     let got = 0;
     while (got < count) {
-        const n = fs.readSync(f.fd, out, got, count - got, f.positionable ? f.position : null);
-        if (n === 0) break;
+        if (!fill_read_buffer(f)) break;
+        const available = f.readBuffer.length - f.readBufferOffset;
+        const n = Math.min(count - got, available);
+        f.readBuffer.copy(out, got, f.readBufferOffset, f.readBufferOffset + n);
+        f.readBufferOffset += n;
         got += n;
         if (f.positionable) f.position += n;
     }
@@ -234,10 +273,9 @@ const read_ahead = function(f) {
     }
     const chunks = [];
     for (;;) {
-        const chunk = Buffer.alloc(4096);
-        const n = fs.readSync(f.fd, chunk, 0, chunk.length, null);
-        if (n === 0) break;
-        chunks.push(new Uint8Array(chunk.buffer, chunk.byteOffset, n));
+        const chunk = read_bytes(f, 4096);
+        if (chunk.length === 0) break;
+        chunks.push(Buffer.from(chunk));
     }
     let total = 0;
     for (const c of chunks) total += c.length;
@@ -248,17 +286,26 @@ const read_ahead = function(f) {
 };
 
 const read_line = function(f, keepNewline) {
-    const bytes = [];
-    for (;;) {
-        const b = read_bytes(f, 1);
-        if (b.length === 0) break;
-        bytes.push(b[0]);
-        if (b[0] === 10) break;
+    const chunks = [];
+    let length = 0;
+    while (fill_read_buffer(f)) {
+        const start = f.readBufferOffset;
+        const newline = f.readBuffer.indexOf(10, start);
+        const end = newline < 0 ? f.readBuffer.length : newline + 1;
+        const chunk = f.readBuffer.subarray(start, end);
+        chunks.push(chunk);
+        length += chunk.length;
+        f.readBufferOffset = end;
+        if (f.positionable) f.position += chunk.length;
+        if (newline >= 0) break;
     }
-    if (bytes.length === 0) return null;
-    if (!keepNewline && bytes[bytes.length - 1] === 10) bytes.pop();
-    if (!keepNewline && bytes.length && bytes[bytes.length - 1] === 13) bytes.pop();
-    return Uint8Array.from(bytes);
+    if (length === 0) return null;
+    let result = Buffer.concat(chunks, length);
+    if (!keepNewline && result[result.length - 1] === 10)
+        result = result.subarray(0, result.length - 1);
+    if (!keepNewline && result.length && result[result.length - 1] === 13)
+        result = result.subarray(0, result.length - 1);
+    return new Uint8Array(result.buffer, result.byteOffset, result.byteLength);
 };
 
 const number_prefix_length = function(text) {
@@ -414,6 +461,8 @@ const f_seek = function(L) {
     if (position < 0n || position > BigInt(Number.MAX_SAFE_INTEGER))
         return luaL_fileresult(L, false, null, new Error("Invalid argument"));
     p.f.position = Number(position);
+    p.f.readBuffer = Buffer.alloc(0);
+    p.f.readBufferOffset = 0;
     lua_pushinteger(L, p.f.position);
     return 1;
 };
@@ -541,11 +590,6 @@ const io_read = function(L) {
     return g_read(L, f, 1);
 };
 
-/* node <= 6 doesn't support passing a Uint8Array to fs.writeSync */
-const prepare_string_for_write = (typeof process !== "undefined" && process.versions.node > 6) ?
-    (s) => s :
-    (s) => (typeof Buffer !== "undefined" ? Buffer.from(s.buffer, s.byteOffset, s.byteLength) : s);
-
 const g_write = function(L, f, arg) {
     if (!f || typeof f.fd !== "number")
         return luaL_error(L, to_luastring("file is already closed", true));
@@ -555,8 +599,7 @@ const g_write = function(L, f, arg) {
     for (; nargs--; arg++) {
         const s = luaL_checklstring(L, arg);
         try {
-            const data = prepare_string_for_write(s);
-            const buffer = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+            const buffer = Buffer.from(s.buffer, s.byteOffset, s.byteLength);
             status = status && write_file_data(f, buffer);
         } catch (e) {
             status = false;
@@ -606,19 +649,32 @@ const f_setvbuf = function(L) {
 
 const io_tmpfile = function(L) {
     let directory;
+    let filePath;
+    let fd = null;
     try {
-        directory = fs.mkdtempSync("/tmp/luanode-");
-        const path = directory + "/tmpfile";
-        const fd = fs.openSync(path, "w+");
+        directory = fs.mkdtempSync(path.join(os.tmpdir(), "luanode-"));
+        filePath = path.join(directory, "tmpfile");
+        fd = fs.openSync(filePath, "w+");
         const p = newprefile(L);
         p.f = {
-            fd, path, directory, temporary: true,
+            fd, path: filePath, directory, temporary: true,
             position: 0, positionable: true, append: false,
-            bufferMode: "no", bufferSize: 8192, buffer: [], bufferLength: 0
+            bufferMode: "no", bufferSize: 8192, buffer: [], bufferLength: 0,
+            readBuffer: Buffer.alloc(0), readBufferOffset: 0
         };
         p.closef = f_close;
+        fd = null;
         return 1;
     } catch (e) {
+        if (fd !== null) {
+            try { fs.closeSync(fd); } catch (closeError) {}
+        }
+        if (filePath) {
+            try { fs.unlinkSync(filePath); } catch (unlinkError) {}
+        }
+        if (directory) {
+            try { fs.rmdirSync(directory); } catch (removeError) {}
+        }
         return luaL_fileresult(L, false, null, e);
     }
 };

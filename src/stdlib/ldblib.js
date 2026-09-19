@@ -422,9 +422,11 @@ const dblib = {
 
 let getinput;
 if (typeof process !== "undefined") {
-    const readlineSync = require('readline-sync');
-    readlineSync.setDefaultOptions({ prompt: 'lua_debug> ' });
-    getinput = () => readlineSync.prompt();
+    let readlineSync;
+    getinput = () => {
+        if (!readlineSync) readlineSync = require('readline-sync');
+        return readlineSync.prompt({ prompt: 'lua_debug> ' });
+    };
 } else if (typeof window !== "undefined") {
     getinput = () => {
         const input = prompt("lua_debug>", "");

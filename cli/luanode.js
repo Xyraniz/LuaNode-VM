@@ -81,7 +81,8 @@ function runString(code, chunkName) {
 function runFile(filePath, scriptArgs) {
     let code;
     try {
-        code = fs.readFileSync(filePath, "utf8");
+        /* Lua chunks are byte sequences: decoding as UTF-8 corrupts bytecode. */
+        code = fs.readFileSync(filePath);
     } catch (e) {
         process.stderr.write("luanode: cannot open " + filePath + ": " + e.message + "\n");
         process.exit(1);
@@ -98,7 +99,7 @@ function runFile(filePath, scriptArgs) {
     createArgTable(L, filePath, scriptArgs);
 
     const chunkName = "@" + filePath;
-    const status = lauxlib.luaL_loadbuffer(L, to_luastring(code), to_luastring(chunkName));
+    const status = lauxlib.luaL_loadbuffer(L, code, code.length, to_luastring(chunkName));
     if (status !== lua.LUA_OK) {
         const msg = safeToJsString(lua.lua_tostring(L, -1));
         process.stderr.write("luanode: " + msg + "\n");
@@ -121,7 +122,7 @@ function safeToJsString(ls) {
     if (!ls) return "(no error message)";
     try {
         return to_jsstring(ls);
-    } catch (e) {
+    } catch {
         return "(error message not convertible)";
     }
 }

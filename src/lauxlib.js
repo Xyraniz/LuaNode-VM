@@ -293,7 +293,7 @@ const luaL_fileresult = function(L, stat, fname, e) {
         let message, errno;
         if (e) {
             message = e.message;
-            errno = -e.errno;
+            errno = Number.isInteger(e.errno) ? -e.errno : 0;
         } else {
             message = "Success"; /* what strerror(0) returns */
             errno = 0;

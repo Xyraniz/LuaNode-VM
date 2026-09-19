@@ -9,7 +9,7 @@ const globals = require("globals");
 
 module.exports = [
     {
-        files: ["src/**/*.js", "*.js"],
+        files: ["src/**/*.js", "cli/**/*.js", "*.js"],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: "commonjs",

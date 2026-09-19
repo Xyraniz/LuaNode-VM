@@ -369,23 +369,8 @@ const lua_number2strx = function(L, fmt, x) {
     return to_luastring(text);
 };
 
-/*
-** Maximum size of each formatted item. This maximum size is produced
-** by format('%.99f', -maxfloat), and is equal to 99 + 3 ('-', '.',
-** and '\0') + number of decimal digits to represent maxfloat (which
-** is maximum exponent + 1). (99+3+1 then rounded to 120 for "extra
-** expenses", such as locale-dependent stuff)
-*/
-// const MAX_ITEM   = 120;// TODO: + l_mathlim(MAX_10_EXP);
-
-
 /* valid flags in a format specification */
 const FLAGS = to_luastring("-+ #0");
-
-/*
-** maximum size of each format specification (such as "%-099.99d")
-*/
-// const MAX_FORMAT = 32;
 
 const isalpha = e => (97 <= e && e <= 122) || (65 <= e && e <= 90);
 const isdigit = e => 48 <= e && e <= 57;

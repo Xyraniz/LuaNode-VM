@@ -64,87 +64,72 @@ const to_jsstring = function(value, from, to, replacement_char) {
         }
         return s;
     }
+    const invalid = function() {
+        if (!replacement_char) throw RangeError(unicode_error_message);
+        str += "\uFFFD";
+    };
     for (let i = start; i < to;) {
-        let u0 = value[i++];
+        const u0 = value[i];
         if (u0 < 0x80) {
-            /* single byte sequence */
             str += String.fromCharCode(u0);
-        } else if (u0 < 0xC2 || u0 > 0xF4) {
-            if (!replacement_char) throw RangeError(unicode_error_message);
-            str += "ï¿½";
-        } else if (u0 <= 0xDF) {
-            /* two byte sequence */
-            if (i >= to) {
-                if (!replacement_char) throw RangeError(unicode_error_message);
-                str += "ï¿½";
-                continue;
-            }
-            let u1 = value[i++];
-            if ((u1&0xC0) !== 0x80) {
-                if (!replacement_char) throw RangeError(unicode_error_message);
-                str += "ï¿½";
-                continue;
-            }
-            str += String.fromCharCode(((u0 & 0x1F) << 6) + (u1 & 0x3F));
-        } else if (u0 <= 0xEF) {
-            /* three byte sequence */
-            if (i+1 >= to) {
-                if (!replacement_char) throw RangeError(unicode_error_message);
-                str += "ï¿½";
-                continue;
-            }
-            let u1 = value[i++];
-            if ((u1&0xC0) !== 0x80) {
-                if (!replacement_char) throw RangeError(unicode_error_message);
-                str += "ï¿½";
-                continue;
-            }
-            let u2 = value[i++];
-            if ((u2&0xC0) !== 0x80) {
-                if (!replacement_char) throw RangeError(unicode_error_message);
-                str += "ï¿½";
-                continue;
-            }
-            let u = ((u0 & 0x0F) << 12) + ((u1 & 0x3F) << 6) + (u2 & 0x3F);
-            if (u <= 0xFFFF) { /* BMP codepoint */
-                str += String.fromCharCode(u);
-            } else { /* Astral codepoint */
-                u -= 0x10000;
-                let s1 = (u >> 10) + 0xD800;
-                let s2 = (u % 0x400) + 0xDC00;
-                str += String.fromCharCode(s1, s2);
-            }
+            i++;
+            continue;
+        }
+
+        let length;
+        let codepoint;
+        if (u0 >= 0xC2 && u0 <= 0xDF) {
+            length = 2;
+            codepoint = u0 & 0x1F;
+        } else if (u0 >= 0xE0 && u0 <= 0xEF) {
+            length = 3;
+            codepoint = u0 & 0x0F;
+        } else if (u0 >= 0xF0 && u0 <= 0xF4) {
+            length = 4;
+            codepoint = u0 & 0x07;
         } else {
-            /* four byte sequence */
-            if (i+2 >= to) {
-                if (!replacement_char) throw RangeError(unicode_error_message);
-                str += "ï¿½";
-                continue;
+            invalid();
+            i++;
+            continue;
+        }
+
+        let valid = true;
+        let consumed = 1;
+        for (let j = 1; j < length; j++) {
+            if (i + j >= to) {
+                /* A truncated suffix is one invalid maximal subpart. */
+                consumed = to - i;
+                valid = false;
+                break;
             }
-            let u1 = value[i++];
-            if ((u1&0xC0) !== 0x80) {
-                if (!replacement_char) throw RangeError(unicode_error_message);
-                str += "ï¿½";
-                continue;
+            const next = value[i + j];
+            let min = 0x80;
+            let max = 0xBF;
+            if (j === 1) {
+                if (u0 === 0xE0 || u0 === 0xF0) min = u0 === 0xE0 ? 0xA0 : 0x90;
+                if (u0 === 0xED) max = 0x9F; /* exclude UTF-16 surrogates */
+                if (u0 === 0xF4) max = 0x8F; /* stop at U+10FFFF */
             }
-            let u2 = value[i++];
-            if ((u2&0xC0) !== 0x80) {
-                if (!replacement_char) throw RangeError(unicode_error_message);
-                str += "ï¿½";
-                continue;
+            if (next < min || next > max) {
+                valid = false;
+                break;
             }
-            let u3 = value[i++];
-            if ((u3&0xC0) !== 0x80) {
-                if (!replacement_char) throw RangeError(unicode_error_message);
-                str += "ï¿½";
-                continue;
-            }
-            /* Has to be astral codepoint */
-            let u = ((u0 & 0x07) << 18) + ((u1 & 0x3F) << 12) + ((u2 & 0x3F) << 6) + (u3 & 0x3F);
-            u -= 0x10000;
-            let s1 = (u >> 10) + 0xD800;
-            let s2 = (u % 0x400) + 0xDC00;
-            str += String.fromCharCode(s1, s2);
+            consumed++;
+            codepoint = (codepoint << 6) | (next & 0x3F);
+        }
+
+        if (!valid) {
+            invalid();
+            i += consumed;
+            continue;
+        }
+
+        i += length;
+        if (length === 2 || length === 3) {
+            str += String.fromCharCode(codepoint);
+        } else {
+            const scalar = codepoint - 0x10000;
+            str += String.fromCharCode((scalar >> 10) + 0xD800, (scalar & 0x3FF) + 0xDC00);
         }
     }
     return str;

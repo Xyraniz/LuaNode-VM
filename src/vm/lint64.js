@@ -110,7 +110,7 @@ const normalize = function(v) {
            Reject it before toFixed(), which uses exponential notation for
            sufficiently large magnitudes and cannot be passed to BigInt. */
         if (v < -9223372036854775808 || v >= 9223372036854775808) return null;
-        if (v >= MIN_SAFE && v <= MAX_SAFE) return v;
+        if (isSafeNumber(v)) return v;
         /* A Number outside the safe range but still integral: promote to
            BigInt via the exact decimal string to avoid double rounding. */
         return shrink(BigInt(v.toFixed(0)));
@@ -209,8 +209,6 @@ const imod = function(a, b) {
 ** 64 bits (as an unsigned value), perform the op, then re-interpret the
 ** result as a signed int64 and shrink it.
 */
-const MASK64 = MODULO - 1n;   /* 2^64 - 1 */
-
 const toU64 = function(v) { return BigInt.asUintN(64, toBigInt(v)); };
 
 const band = function(a, b) { return wrap(BigInt.asIntN(64, toU64(a) & toU64(b))); };
