@@ -49,4 +49,18 @@ describe("LuaNode-VM CLI", () => {
             fs.rmSync(dir, { recursive: true, force: true });
         }
     });
+    test("executes inline code and reports its chunk name", () => {
+        const cli = path.join(__dirname, "..", "cli", "luanode.js");
+
+        const success = spawnSync(process.execPath, [cli, "-e", "print('inline-ok')"], { encoding: "utf8" });
+        expect(success.status).toBe(0);
+        expect(success.stderr).toBe("");
+        expect(success.stdout.trim()).toBe("inline-ok");
+
+        const syntaxError = spawnSync(process.execPath, [cli, "-e", "this is not valid"], { encoding: "utf8" });
+        expect(syntaxError.status).toBe(1);
+        expect(syntaxError.stdout).toBe("");
+        expect(syntaxError.stderr).toContain("=(command line):1:");
+    });
+
 });
