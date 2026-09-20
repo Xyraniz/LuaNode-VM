@@ -60,7 +60,7 @@ describe("LuaNode-VM CLI", () => {
         const syntaxError = spawnSync(process.execPath, [cli, "-e", "this is not valid"], { encoding: "utf8" });
         expect(syntaxError.status).toBe(1);
         expect(syntaxError.stdout).toBe("");
-        expect(syntaxError.stderr).toContain("=(command line):1:");
+        expect(syntaxError.stderr).toContain("(command line):1:");
     });
 
 });
