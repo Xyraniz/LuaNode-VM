@@ -21,7 +21,6 @@ const {
     lua_pushliteral,
     lua_pushlstring,
     lua_pushnil,
-    lua_pushnumber,
     lua_pushstring,
     lua_pushvalue,
     lua_remove,
@@ -38,7 +37,6 @@ const {
     LUA_FILEHANDLE,
     luaL_argcheck,
     luaL_checkany,
-    luaL_checkinteger,
     luaL_checklstring,
     luaL_checkoption,
     luaL_checkudata,
@@ -70,7 +68,7 @@ const isclosed = function(p) {
 
 const io_type = function(L) {
     luaL_checkany(L, 1);
-    let p = luaL_testudata(L, 1, LUA_FILEHANDLE);
+    const p = luaL_testudata(L, 1, LUA_FILEHANDLE);
     if (p === null)
         lua_pushnil(L);  /* not a file */
     else if (isclosed(p))
@@ -81,7 +79,7 @@ const io_type = function(L) {
 };
 
 const f_tostring = function(L) {
-    let p = tolstream(L);
+    const p = tolstream(L);
     if (isclosed(p))
         lua_pushliteral(L, "file (closed)");
     else
@@ -90,7 +88,7 @@ const f_tostring = function(L) {
 };
 
 const tofile = function(L) {
-    let p = tolstream(L);
+    const p = tolstream(L);
     if (isclosed(p))
         luaL_error(L, to_luastring("attempt to use a closed file"));
     lualib.lua_assert(p.f);
@@ -98,7 +96,7 @@ const tofile = function(L) {
 };
 
 const newprefile = function(L) {
-    let p = lua_newuserdata(L);
+    const p = lua_newuserdata(L);
     p.f = null;
     p.closef = null;
     luaL_setmetatable(L, LUA_FILEHANDLE);
@@ -123,8 +121,8 @@ const close_file = function(p) {
         if (!closeError) closeError = e;
     } finally {
         if (f && f.temporary && f.path) {
-            try { fs.unlinkSync(f.path); } catch (e) {}
-            if (f.directory) try { fs.rmdirSync(f.directory); } catch (e) {}
+            try { fs.unlinkSync(f.path); } catch {}
+            if (f.directory) try { fs.rmdirSync(f.directory); } catch {}
         }
         p.closef = null;
         p.f = null;
@@ -150,7 +148,7 @@ const f_close = function(L) {
 const f_gc = function(L) {
     const p = tolstream(L);
     if (!isclosed(p) && p.closef !== io_noclose) {
-        try { close_file(p); } catch (e) {}
+        try { close_file(p); } catch {}
     }
     return 0;
 };
@@ -515,7 +513,7 @@ const io_lines = function(L) {
     } else if (lua_type(L, 1) === LUA_TNUMBER || luaL_testudata(L, 1, LUA_FILEHANDLE)) {
         p = luaL_checkudata(L, 1, LUA_FILEHANDLE);
     } else {
-        const filename = luaL_checklstring(L, 1);
+        luaL_checklstring(L, 1);
         lua_pushstring(L, to_luastring("r", true));
         lua_insert(L, 2);  /* io.open expects its mode at argument #2 */
         const n = io_open(L);
@@ -532,13 +530,6 @@ const io_lines = function(L) {
     return 1;
 };
 
-const aux_close = function(L) {
-    let p = tolstream(L);
-    let cf = p.closef;
-    p.closef = null;
-    return cf(L);
-};
-
 const io_close = function(L) {
     if (lua_isnone(L, 1))  /* no argument? */
         lua_getfield(L, LUA_REGISTRYINDEX, IO_OUTPUT);  /* use standard output */
@@ -550,7 +541,7 @@ const io_close = function(L) {
 
 const getiofile = function(L, findex) {
     lua_getfield(L, LUA_REGISTRYINDEX, findex);
-    let p = lua_touserdata(L, -1);
+    const p = lua_touserdata(L, -1);
     if (isclosed(p))
         luaL_error(L, to_luastring("standard %s file is closed"), findex.subarray(IOPREF_LEN));
     return p.f;
@@ -615,7 +606,7 @@ const io_write = function(L) {
 };
 
 const f_write = function(L) {
-    let f = tofile(L);
+    const f = tofile(L);
     lua_pushvalue(L, 1); /* push file at the stack top (to be returned) */
     return g_write(L, f, 2);
 };
@@ -667,13 +658,13 @@ const io_tmpfile = function(L) {
         return 1;
     } catch (e) {
         if (fd !== null) {
-            try { fs.closeSync(fd); } catch (closeError) {}
+            try { fs.closeSync(fd); } catch {}
         }
         if (filePath) {
-            try { fs.unlinkSync(filePath); } catch (unlinkError) {}
+            try { fs.unlinkSync(filePath); } catch {}
         }
         if (directory) {
-            try { fs.rmdirSync(directory); } catch (removeError) {}
+            try { fs.rmdirSync(directory); } catch {}
         }
         return luaL_fileresult(L, false, null, e);
     }
@@ -713,7 +704,7 @@ const createmeta = function(L) {
 };
 
 const io_noclose = function(L) {
-    let p = tolstream(L);
+    const p = tolstream(L);
     p.closef = io_noclose;
     lua_pushnil(L);
     lua_pushliteral(L, "cannot close standard file");
@@ -721,7 +712,7 @@ const io_noclose = function(L) {
 };
 
 const createstdfile = function(L, f, k, fname) {
-    let p = newprefile(L);
+    const p = newprefile(L);
     p.f = f;
     p.closef = io_noclose;
     if (k !== null) {

@@ -8,7 +8,7 @@ const {
 const LUA_VERSUFFIX = "_" + LUA_VERSION_MAJOR + "_" + LUA_VERSION_MINOR;
 module.exports.LUA_VERSUFFIX = LUA_VERSUFFIX;
 
-module.exports.lua_assert = function(c) {};
+module.exports.lua_assert = function(_c) {};
 
 module.exports.luaopen_base = require("./lbaselib.js").luaopen_base;
 

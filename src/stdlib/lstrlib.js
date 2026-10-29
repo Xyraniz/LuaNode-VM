@@ -28,9 +28,9 @@ const fixExponent = function(s) {
 */
 const formatInteger = function(form, n) {
     /* Parse the format string: %[flags][width][.precision]specifier */
-    let s = String.fromCharCode(...form);
-    let spec = s[s.length - 1];
-    let body = s.slice(1, -1);  /* everything between % and specifier */
+    const s = String.fromCharCode(...form);
+    const spec = s[s.length - 1];
+    const body = s.slice(1, -1);  /* everything between % and specifier */
 
     let leftAlign = false, plusSign = false, spaceSign = false,
         zeroPad = false, altForm = false;
@@ -68,23 +68,23 @@ const formatInteger = function(form, n) {
 
     /* Produce the numeric string (without sign/padding) for the specifier. */
     let negative = false, digits;
-    let big = I64.toBigInt(n);
+    const big = I64.toBigInt(n);
 
     /* For 'u', treat as unsigned 64-bit. For 'x'/'X'/'o' the value is
        interpreted as unsigned too. For 'd'/'i' it is signed. */
     if (spec === 'd' || spec === 'i') {
         negative = big < 0n;
-        let absVal = negative ? -big : big;
+        const absVal = negative ? -big : big;
         digits = absVal.toString(10);
     } else if (spec === 'u') {
-        let u = BigInt.asUintN(64, big);
+        const u = BigInt.asUintN(64, big);
         digits = u.toString(10);
     } else if (spec === 'x' || spec === 'X') {
-        let u = BigInt.asUintN(64, big);
+        const u = BigInt.asUintN(64, big);
         digits = u.toString(16);
         if (spec === 'X') digits = digits.toUpperCase();
     } else if (spec === 'o') {
-        let u = BigInt.asUintN(64, big);
+        const u = BigInt.asUintN(64, big);
         digits = u.toString(8);
     } else {
         /* Fallback — should not happen. */
@@ -124,8 +124,8 @@ const formatInteger = function(form, n) {
     }
 
     /* Assemble the number portion (prefix + digits). */
-    let number = prefix + digits;
-    let totalLen = sign.length + number.length;
+    const number = prefix + digits;
+    const totalLen = sign.length + number.length;
 
     /* Padding. */
     let result;
@@ -138,7 +138,7 @@ const formatInteger = function(form, n) {
            simplicity (matching C printf for the common cases) we put
            zeros after the sign. For x/X the 0x prefix stays before zeros. */
         if (prefix) {
-            let padCount = width - totalLen;
+            const padCount = width - totalLen;
             result = sign + prefix + "0".repeat(padCount) + digits;
         } else {
             result = sign + "0".repeat(width - totalLen) + number;
@@ -155,7 +155,6 @@ const {
     LUA_INTEGER_FRMLEN,
     LUA_MININTEGER,
     LUA_NUMBER_FMT,
-    LUA_NUMBER_FRMLEN,
     frexp,
     lua_getlocaledecpoint
 } = require('../luaconf.js');
@@ -244,7 +243,7 @@ const MAXSIZE = 2147483647;
 
 /* Give natural (i.e. strings end at the first \0) length of a string represented by an array of bytes */
 const strlen = function(s) {
-    let len = luastring_indexOf(s, 0);
+    const len = luastring_indexOf(s, 0);
     return len > -1 ? len : s.length;
 };
 
@@ -263,8 +262,8 @@ const posrelat = function(pos, len) {
 };
 
 const str_sub = function(L) {
-    let s = luaL_checkstring(L, 1);
-    let l = s.length;
+    const s = luaL_checkstring(L, 1);
+    const l = s.length;
     let start = posrelat(luaL_checkinteger(L, 2), l);
     let end = posrelat(luaL_optinteger(L, 3, -1), l);
     if (start < 1) start = 1;
@@ -281,11 +280,11 @@ const str_len = function(L) {
 };
 
 const str_char = function(L) {
-    let n = lua_gettop(L);  /* number of arguments */
-    let b = new luaL_Buffer();
-    let p = luaL_buffinitsize(L, b, n);
+    const n = lua_gettop(L);  /* number of arguments */
+    const b = new luaL_Buffer();
+    const p = luaL_buffinitsize(L, b, n);
     for (let i = 1; i <= n; i++) {
-        let c = luaL_checkinteger(L, i);
+        const c = luaL_checkinteger(L, i);
         luaL_argcheck(L, c >= 0 && c <= 255, "value out of range"); // Strings are 8-bit clean
         p[i-1] = c;
     }
@@ -299,8 +298,8 @@ const writer = function(L, b, size, B) {
 };
 
 const str_dump = function(L) {
-    let b = new luaL_Buffer();
-    let strip = lua_toboolean(L, 2);
+    const b = new luaL_Buffer();
+    const strip = lua_toboolean(L, 2);
     luaL_checktype(L, 1, LUA_TFUNCTION);
     lua_settop(L, 1);
     luaL_buffinit(L, b);
@@ -309,8 +308,6 @@ const str_dump = function(L) {
     luaL_pushresult(b);
     return 1;
 };
-
-const SIZELENMOD = LUA_NUMBER_FRMLEN.length + 1;
 
 const L_NBFD = 1;
 
@@ -330,7 +327,7 @@ const num2straux = function(x) {
         return to_luastring(zero);
     } else {
         let buff = "";
-        let fe = frexp(x);  /* 'x' fraction and exponent */
+        const fe = frexp(x);  /* 'x' fraction and exponent */
         let m = fe[0];
         let e = fe[1];
         if (m < 0) {  /* is number negative? */
@@ -409,8 +406,8 @@ const addquoted = function(b, s, len) {
 */
 const checkdp = function(buff) {
     if (luastring_indexOf(buff, 46 /* ('.').charCodeAt(0) */) < 0) {  /* no dot? */
-        let point = lua_getlocaledecpoint();  /* try locale point */
-        let ppoint = luastring_indexOf(buff, point);
+        const point = lua_getlocaledecpoint();  /* try locale point */
+        const ppoint = luastring_indexOf(buff, point);
         if (ppoint) buff[ppoint] = 46 /* ('.').charCodeAt(0) */;  /* change it to a dot */
     }
 };
@@ -418,25 +415,25 @@ const checkdp = function(buff) {
 const addliteral = function(L, b, arg) {
     switch(lua_type(L, arg)) {
         case LUA_TSTRING: {
-            let s = lua_tostring(L, arg);
+            const s = lua_tostring(L, arg);
             addquoted(b, s, s.length);
             break;
         }
         case LUA_TNUMBER: {
             let buff;
             if (!lua_isinteger(L, arg)) {  /* float? */
-                let n = lua_tonumber(L, arg);  /* write as hexa ('%a') */
+                const n = lua_tonumber(L, arg);  /* write as hexa ('%a') */
                 buff = lua_number2strx(L, to_luastring(`%${LUA_INTEGER_FRMLEN}a`), n);
                 checkdp(buff);  /* ensure it uses a dot */
             } else {  /* integers */
-                let n = lua_tointeger(L, arg);
+                const n = lua_tointeger(L, arg);
                 if (I64.eq(n, LUA_MININTEGER)) {
                     /* corner case: print MININTEGER in hex to avoid the
                        unary-minus-on-MAXINT+1 parsing problem */
-                    let u = BigInt.asUintN(64, I64.toBigInt(n));
+                    const u = BigInt.asUintN(64, I64.toBigInt(n));
                     buff = to_luastring("0x" + u.toString(16));
                 } else {
-                    let format = to_luastring(LUA_INTEGER_FMT, true);
+                    const format = to_luastring(LUA_INTEGER_FMT, true);
                     buff = to_luastring(formatInteger(format, n));
                 }
             }
@@ -478,13 +475,27 @@ const scanformat = function(L, strfrmt, i, form) {
 ** add length modifier into formats
 */
 const addlenmod = function(form, lenmod) {
-    let l = form.length;
-    let lm = lenmod.length;
-    let spec = form[l - 1];
+    const l = form.length;
+    const lm = lenmod.length;
+    const spec = form[l - 1];
     for (let i = 0; i < lm; i++)
         form[i + l - 1] = lenmod[i];
     form[l + lm - 1] = spec;
     // form[l + lm] = 0;
+};
+
+const luaStringToLatin1 = function(s) {
+    const chunks = [];
+    for (let i = 0; i < s.length; i += 8192)
+        chunks.push(String.fromCharCode(...s.subarray(i, i + 8192)));
+    return chunks.join("");
+};
+
+const latin1ToLuaString = function(s) {
+    const bytes = new Uint8Array(s.length);
+    for (let i = 0; i < s.length; i++)
+        bytes[i] = s.charCodeAt(i);
+    return bytes;
 };
 
 const formatLargeFixed = function(form, n) {
@@ -539,11 +550,11 @@ const formatLargeFixed = function(form, n) {
 };
 
 const str_format = function(L) {
-    let top = lua_gettop(L);
+    const top = lua_gettop(L);
     let arg = 1;
-    let strfrmt = luaL_checkstring(L, arg);
+    const strfrmt = luaL_checkstring(L, arg);
     let i = 0;
-    let b = new luaL_Buffer();
+    const b = new luaL_Buffer();
     luaL_buffinit(L, b);
     while (i < strfrmt.length) {
         if (strfrmt[i] !== L_ESC) {
@@ -551,21 +562,21 @@ const str_format = function(L) {
         } else if (strfrmt[++i] === L_ESC) {
             luaL_addchar(b, strfrmt[i++]); /* %% */
         } else { /* format item */
-            let form = [];  /* to store the format ('%...') */
+            const form = [];  /* to store the format ('%...') */
             if (++arg > top)
                 luaL_argerror(L, arg, to_luastring("no value"));
             i = scanformat(L, strfrmt, i, form);
             switch (String.fromCharCode(strfrmt[i++])) {
                 case 'c': {
-                    let c = luaL_checkinteger(L, arg);
+                    const c = luaL_checkinteger(L, arg);
                     /* Character code must fit in a byte. For BigInt, convert via Number. */
-                    let code = typeof c === "bigint" ? Number(c) : c;
+                    const code = typeof c === "bigint" ? Number(c) : c;
                     luaL_addchar(b, code & 0xFF);
                     break;
                 }
                 case 'd': case 'i':
                 case 'o': case 'u': case 'x': case 'X': {
-                    let n = luaL_checkinteger(L, arg);
+                    const n = luaL_checkinteger(L, arg);
                     addlenmod(form, to_luastring(LUA_INTEGER_FRMLEN, true));
                     luaL_addstring(b, to_luastring(formatInteger(form, n)));
                     break;
@@ -577,7 +588,7 @@ const str_format = function(L) {
                 }
                 case 'e': case 'E': case 'f':
                 case 'g': case 'G': {
-                    let n = luaL_checknumber(L, arg);
+                    const n = luaL_checknumber(L, arg);
                     addlenmod(form, to_luastring(LUA_INTEGER_FRMLEN, true));
                     const largeFixed = formatLargeFixed(form, n);
                     luaL_addstring(b, to_luastring(largeFixed === null
@@ -590,7 +601,7 @@ const str_format = function(L) {
                     break;
                 }
                 case 's': {
-                    let s = luaL_tolstring(L, arg);
+                    const s = luaL_tolstring(L, arg);
                     if (form.length <= 2 || form[2] === 0) {  /* no modifiers? */
                         luaL_addvalue(b);  /* keep entire string */
                     } else {
@@ -599,8 +610,9 @@ const str_format = function(L) {
                             /* no precision and string is too long to be formatted */
                             luaL_addvalue(b);  /* keep entire string */
                         } else {  /* format the string into 'buff' */
-                            // TODO: will fail if s is not valid UTF-8
-                            luaL_addstring(b, to_luastring(sprintf(String.fromCharCode(...form), to_jsstring(s))));
+                            /* Keep Lua's byte strings one code unit per byte while sprintf formats width and precision. */
+                            const formatted = sprintf(String.fromCharCode(...form), luaStringToLatin1(s));
+                            luaL_addstring(b, latin1ToLuaString(formatted));
                             lua_pop(L, 1);  /* remove result from 'luaL_tolstring' */
                         }
                     }
@@ -681,7 +693,7 @@ const getnum = function(fmt, df) {
 ** than the maximum size for integers.
 */
 const getnumlimit = function(h, fmt, df) {
-    let sz = getnum(fmt, df);
+    const sz = getnum(fmt, df);
     if (sz > MAXINTSIZE || sz <= 0)
         luaL_error(h.L, to_luastring("integral size (%d) out of limits [1,%d]"), sz, MAXINTSIZE);
     return sz;
@@ -691,7 +703,7 @@ const getnumlimit = function(h, fmt, df) {
 ** Read and classify next option. 'size' is filled with option's size.
 */
 const getoption = function(h, fmt) {
-    let r = {
+    const r = {
         opt: fmt.s[fmt.off++],
         size: 0  /* default */
     };
@@ -742,13 +754,13 @@ const getoption = function(h, fmt) {
 ** despite its size.
 */
 const getdetails = function(h, totalsize, fmt) {
-    let r = {
+    const r = {
         opt: NaN,
         size: NaN,
         ntoalign: NaN
     };
 
-    let opt = getoption(h, fmt);
+    const opt = getoption(h, fmt);
     r.size = opt.size;
     r.opt = opt.opt;
     let align = r.size;  /* usually, alignment follows size */
@@ -800,8 +812,8 @@ const getdetails = function(h, totalsize, fmt) {
 ** BigInt.asUintN masking. For size > 8, sign-extension bytes are added.
 */
 const packint = function(b, n, islittle, size, neg) {
-    let buff = luaL_prepbuffsize(b, size);
-    let big = I64.toBigInt(n);
+    const buff = luaL_prepbuffsize(b, size);
+    const big = I64.toBigInt(n);
     for (let i = 0; i < size; i++) {
         let byte;
         if (i < 8) {
@@ -816,9 +828,9 @@ const packint = function(b, n, islittle, size, neg) {
 };
 
 const str_pack = function(L) {
-    let b = new luaL_Buffer();
-    let h = new Header(L);
-    let fmt = {
+    const b = new luaL_Buffer();
+    const h = new Header(L);
+    const fmt = {
         s: luaL_checkstring(L, 1),  /* format string */
         off: 0
     };
@@ -827,9 +839,9 @@ const str_pack = function(L) {
     lua_pushnil(L);  /* mark to separate arguments from string buffer */
     luaL_buffinit(L, b);
     while (fmt.off < fmt.s.length) {
-        let details = getdetails(h, totalsize, fmt);
-        let opt = details.opt;
-        let size = details.size;
+        const details = getdetails(h, totalsize, fmt);
+        const opt = details.opt;
+        const size = details.size;
         let ntoalign = details.ntoalign;
         totalsize += ntoalign + size;
         while (ntoalign-- > 0)
@@ -837,38 +849,38 @@ const str_pack = function(L) {
         arg++;
         switch (opt) {
             case Kint: {  /* signed integers */
-                let n = luaL_checkinteger(L, arg);
+                const n = luaL_checkinteger(L, arg);
                 if (size < SZINT) {  /* need overflow check? */
                     /* limit = 2^(size*8 - 1); guard against 32-bit shift overflow */
-                    let bits = size * 8 - 1;
-                    let lim = bits < 31 ? (1 << bits) : (Math.pow(2, bits));
+                    const bits = size * 8 - 1;
+                    const lim = bits < 31 ? (1 << bits) : (Math.pow(2, bits));
                     luaL_argcheck(L, -lim <= n && n < lim, arg, "integer overflow");
                 }
                 packint(b, n, h.islittle, size, n < 0);
                 break;
             }
             case Kuint: {  /* unsigned integers */
-                let n = luaL_checkinteger(L, arg);
+                const n = luaL_checkinteger(L, arg);
                 if (size < SZINT) {
                     /* limit = 2^(size*8); guard against 32-bit shift overflow */
-                    let bits = size * 8;
-                    let lim = bits < 31 ? (1 << bits) : (Math.pow(2, bits));
+                    const bits = size * 8;
+                    const lim = bits < 31 ? (1 << bits) : (Math.pow(2, bits));
                     luaL_argcheck(L, 0 <= n && n < lim, arg, "unsigned overflow");
                 }
                 packint(b, n, h.islittle, size, false);
                 break;
             }
             case Kfloat: {  /* floating-point options */
-                let buff = luaL_prepbuffsize(b, size);
-                let n = luaL_checknumber(L, arg);  /* get argument */
-                let dv = new DataView(buff.buffer, buff.byteOffset, buff.byteLength);
+                const buff = luaL_prepbuffsize(b, size);
+                const n = luaL_checknumber(L, arg);  /* get argument */
+                const dv = new DataView(buff.buffer, buff.byteOffset, buff.byteLength);
                 if (size === 4) dv.setFloat32(0, n, h.islittle);
                 else dv.setFloat64(0, n, h.islittle);
                 luaL_addsize(b, size);
                 break;
             }
             case Kchar: {  /* fixed-size string */
-                let s = luaL_checkstring(L, arg);
+                const s = luaL_checkstring(L, arg);
                 let len = s.length;
                 luaL_argcheck(L, len <= size, arg, "string longer than given size");
                 luaL_argcheck(L, len >= size, arg, "wrong length");
@@ -878,8 +890,8 @@ const str_pack = function(L) {
                 break;
             }
             case Kstring: {  /* strings with length count */
-                let s = luaL_checkstring(L, arg);
-                let len = s.length;
+                const s = luaL_checkstring(L, arg);
+                const len = s.length;
                 luaL_argcheck(L,
                     size >= 4 /* sizeof(size_t) */ || len < (1 << (size * NB)),
                     arg, "string length does not fit in given size");
@@ -889,8 +901,8 @@ const str_pack = function(L) {
                 break;
             }
             case Kzstr: {  /* zero-terminated string */
-                let s = luaL_checkstring(L, arg);
-                let len = s.length;
+                const s = luaL_checkstring(L, arg);
+                const len = s.length;
                 luaL_argcheck(L, luastring_indexOf(s, 0) < 0, arg, "strings contains zeros");
                 luaL_addlstring(b, s, len);
                 luaL_addchar(b, 0);  /* add zero at the end */
@@ -908,9 +920,9 @@ const str_pack = function(L) {
 };
 
 const str_reverse = function(L) {
-    let s = luaL_checkstring(L, 1);
-    let l = s.length;
-    let r = new Uint8Array(l);
+    const s = luaL_checkstring(L, 1);
+    const l = s.length;
+    const r = new Uint8Array(l);
     for (let i=0; i<l; i++)
         r[i] = s[l-1-i];
     lua_pushstring(L, r);
@@ -918,9 +930,9 @@ const str_reverse = function(L) {
 };
 
 const str_lower = function(L) {
-    let s = luaL_checkstring(L, 1);
-    let l = s.length;
-    let r = new Uint8Array(l);
+    const s = luaL_checkstring(L, 1);
+    const l = s.length;
+    const r = new Uint8Array(l);
     for (let i=0; i<l; i++) {
         let c = s[i];
         if (isupper(c))
@@ -932,9 +944,9 @@ const str_lower = function(L) {
 };
 
 const str_upper = function(L) {
-    let s = luaL_checkstring(L, 1);
-    let l = s.length;
-    let r = new Uint8Array(l);
+    const s = luaL_checkstring(L, 1);
+    const l = s.length;
+    const r = new Uint8Array(l);
     for (let i=0; i<l; i++) {
         let c = s[i];
         if (islower(c))
@@ -946,18 +958,18 @@ const str_upper = function(L) {
 };
 
 const str_rep = function(L) {
-    let s = luaL_checkstring(L, 1);
-    let l = s.length;
+    const s = luaL_checkstring(L, 1);
+    const l = s.length;
     let n = luaL_checkinteger(L, 2);
-    let sep = luaL_optstring(L, 3, "");
-    let lsep = sep.length;
+    const sep = luaL_optstring(L, 3, "");
+    const lsep = sep.length;
     if (n <= 0) lua_pushliteral(L, "");
     else if (l + lsep < l || l + lsep > MAXSIZE / n)  /* may overflow? */
         return luaL_error(L, to_luastring("resulting string too large"));
     else {
-        let totallen = n * l + (n - 1) * lsep;
-        let b = new luaL_Buffer();
-        let p = luaL_buffinitsize(L, b, totallen);
+        const totallen = n * l + (n - 1) * lsep;
+        const b = new luaL_Buffer();
+        const p = luaL_buffinitsize(L, b, totallen);
         let pi = 0;
         while (n-- > 1) {  /* first n-1 copies (followed by separator) */
             p.set(s, pi);
@@ -974,8 +986,8 @@ const str_rep = function(L) {
 };
 
 const str_byte = function(L) {
-    let s = luaL_checkstring(L, 1);
-    let l = s.length;
+    const s = luaL_checkstring(L, 1);
+    const l = s.length;
     let posi = posrelat(luaL_optinteger(L, 2, 1), l);
     let pose = posrelat(luaL_optinteger(L, 3, posi), l);
 
@@ -985,7 +997,7 @@ const str_byte = function(L) {
     if (pose - posi >= Number.MAX_SAFE_INTEGER)  /* arithmetic overflow? */
         return luaL_error(L, "string slice too long");
 
-    let n = (pose - posi) + 1;
+    const n = (pose - posi) + 1;
     luaL_checkstack(L, n, "string slice too long");
     for (let i = 0; i < n; i++)
         lua_pushinteger(L, s[posi + i - 1]);
@@ -993,17 +1005,17 @@ const str_byte = function(L) {
 };
 
 const str_packsize = function(L) {
-    let h = new Header(L);
-    let fmt = {
+    const h = new Header(L);
+    const fmt = {
         s: luaL_checkstring(L, 1),
         off: 0
     };
     let totalsize = 0;  /* accumulate total size of result */
     while (fmt.off < fmt.s.length) {
-        let details = getdetails(h, totalsize, fmt);
-        let opt = details.opt;
+        const details = getdetails(h, totalsize, fmt);
+        const opt = details.opt;
         let size = details.size;
-        let ntoalign = details.ntoalign;
+        const ntoalign = details.ntoalign;
         size += ntoalign;  /* total space used by option */
         luaL_argcheck(L, totalsize <= MAXSIZE - size, 1, "format result too large");
         totalsize += size;
@@ -1054,16 +1066,16 @@ const unpackint = function(L, str, islittle, size, issigned) {
     /* 64-bit path: accumulate bytes into a BigInt to preserve full range. */
     let res = 0n;
     for (let i = size - 1; i >= 0; i--) {
-        let byte = str[islittle ? i : size - 1 - i];
+        const byte = str[islittle ? i : size - 1 - i];
         res = (res << BigInt(NB)) | BigInt(byte);
     }
 
     if (size > SZINT) {  /* must check unread bytes for consistency */
         /* Sign-extended bytes beyond SZINT must all be 0xFF (if negative)
            or 0x00 (if positive). Determine sign from the SZINT-th byte. */
-        let signByte = str[islittle ? SZINT - 1 : size - SZINT];
-        let neg = issigned && (signByte & 0x80) !== 0;
-        let mask = neg ? MC : 0;
+        const signByte = str[islittle ? SZINT - 1 : size - SZINT];
+        const neg = issigned && (signByte & 0x80) !== 0;
+        const mask = neg ? MC : 0;
         for (let i = SZINT; i < size; i++) {
             if (str[islittle ? i : size - 1 - i] !== mask)
                 luaL_error(L, to_luastring("%d-byte integer does not fit into Lua Integer"), size);
@@ -1083,30 +1095,30 @@ const unpackint = function(L, str, islittle, size, issigned) {
 const unpacknum = function(L, b, islittle, size) {
     lualib.lua_assert(b.length >= size);
 
-    let dv = new DataView(new ArrayBuffer(size));
+    const dv = new DataView(new ArrayBuffer(size));
     for (let i = 0; i < size; i++)
         dv.setUint8(i, b[i]);
 
-    if (size == 4) return dv.getFloat32(0, islittle);
+    if (size === 4) return dv.getFloat32(0, islittle);
     else return dv.getFloat64(0, islittle);
 };
 
 const str_unpack = function(L) {
-    let h = new Header(L);
-    let fmt = {
+    const h = new Header(L);
+    const fmt = {
         s: luaL_checkstring(L, 1),
         off: 0
     };
-    let data = luaL_checkstring(L, 2);
-    let ld = data.length;
+    const data = luaL_checkstring(L, 2);
+    const ld = data.length;
     let pos = posrelat(luaL_optinteger(L, 3, 1), ld) - 1;
     let n = 0;  /* number of results */
     luaL_argcheck(L, pos <= ld && pos >= 0, 3, "initial position out of string");
     while (fmt.off < fmt.s.length) {
-        let details = getdetails(h, pos, fmt);
-        let opt = details.opt;
-        let size = details.size;
-        let ntoalign = details.ntoalign;
+        const details = getdetails(h, pos, fmt);
+        const opt = details.opt;
+        const size = details.size;
+        const ntoalign = details.ntoalign;
         if (/*ntoalign + size > ~pos ||*/ pos + ntoalign + size > ld)
             luaL_argerror(L, 2, to_luastring("data string too short"));
         pos += ntoalign;  /* skip alignment */
@@ -1116,12 +1128,12 @@ const str_unpack = function(L) {
         switch (opt) {
             case Kint:
             case Kuint: {
-                let res = unpackint(L, data.subarray(pos), h.islittle, size, opt === Kint);
+                const res = unpackint(L, data.subarray(pos), h.islittle, size, opt === Kint);
                 lua_pushinteger(L, res);
                 break;
             }
             case Kfloat: {
-                let res = unpacknum(L, data.subarray(pos), h.islittle, size);
+                const res = unpacknum(L, data.subarray(pos), h.islittle, size);
                 lua_pushnumber(L, res);
                 break;
             }
@@ -1130,7 +1142,7 @@ const str_unpack = function(L) {
                 break;
             }
             case Kstring: {
-                let len = unpackint(L, data.subarray(pos), h.islittle, size, 0);
+                const len = unpackint(L, data.subarray(pos), h.islittle, size, 0);
                 luaL_argcheck(L, pos + len + size <= ld, 2, "data string too short");
                 lua_pushstring(L, data.subarray(pos + size, pos + size + len));
                 pos += len;  /* skip string */
@@ -1261,7 +1273,7 @@ const singlematch = function(ms, s, p, ep) {
     if (s >= ms.src_end)
         return false;
     else {
-        let c = ms.src[s];
+        const c = ms.src[s];
         switch (ms.p[p]) {
             case 46 /* '.'.charCodeAt(0) */: return true;  /* matches any char */
             case L_ESC: return match_class(c, ms.p[p + 1]);
@@ -1277,8 +1289,8 @@ const matchbalance = function(ms, s, p) {
     if (ms.src[s] !== ms.p[p])
         return null;
     else {
-        let b = ms.p[p];
-        let e = ms.p[p + 1];
+        const b = ms.p[p];
+        const e = ms.p[p + 1];
         let cont = 1;
         while (++s < ms.src_end) {
             if (ms.src[s] === e) {
@@ -1296,7 +1308,7 @@ const max_expand = function(ms, s, p, ep) {
         i++;
     /* keeps trying to match with the maximum repetitions */
     while (i >= 0) {
-        let res = match(ms, s + i, ep + 1);
+        const res = match(ms, s + i, ep + 1);
         if (res) return res;
         i--;  /* else didn't match; reduce 1 repetition to try again */
     }
@@ -1305,7 +1317,7 @@ const max_expand = function(ms, s, p, ep) {
 
 const min_expand = function(ms, s, p, ep) {
     for (;;) {
-        let res = match(ms, s, ep + 1);
+        const res = match(ms, s, ep + 1);
         if (res !== null)
             return res;
         else if (singlematch(ms, s, p, ep))
@@ -1315,7 +1327,7 @@ const min_expand = function(ms, s, p, ep) {
 };
 
 const start_capture = function(ms, s, p, what) {
-    let level = ms.level;
+    const level = ms.level;
     if (level >= LUA_MAXCAPTURES) luaL_error(ms.L, to_luastring("too many captures"));
     ms.capture[level] = ms.capture[level] ? ms.capture[level] : {};
     ms.capture[level].init = s;
@@ -1328,7 +1340,7 @@ const start_capture = function(ms, s, p, what) {
 };
 
 const end_capture = function(ms, s, p) {
-    let l = capture_to_close(ms);
+    const l = capture_to_close(ms);
     ms.capture[l].len = s - ms.capture[l].init;  /* close capture */
     let res;
     if ((res = match(ms, s, p)) === null)  /* match failed? */
@@ -1343,7 +1355,7 @@ const array_cmp = function(a, ai, b, bi, len) {
 
 const match_capture = function(ms, s, l) {
     l = check_capture(ms, l);
-    let len = ms.capture[l].len;
+    const len = ms.capture[l].len;
     if ((ms.src_end-s) >= len && array_cmp(ms.src, ms.capture[l].init, ms.src, s, len))
         return s+len;
     else return null;
@@ -1393,8 +1405,8 @@ const match = function(ms, s, p) {
                             p += 2;
                             if (ms.p[p] !== 91 /* '['.charCodeAt(0) */)
                                 luaL_error(ms.L, to_luastring("missing '[' after '%%f' in pattern"));
-                            let ep = classend(ms, p);  /* points to what is next */
-                            let previous = s === ms.src_init ? 0 : ms.src[s-1];
+                            const ep = classend(ms, p);  /* points to what is next */
+                            const previous = s === ms.src_init ? 0 : ms.src[s-1];
                             if (!matchbracketclass(ms, previous, p, ep - 1) && matchbracketclass(ms, (s===ms.src_end)?0:ms.src[s], p, ep - 1)) {
                                 p = ep; gotoinit = true; break;
                             }
@@ -1415,7 +1427,7 @@ const match = function(ms, s, p) {
                 }
                 default: {  /* pattern class plus optional suffix */
                     gotodefault = false;
-                    let ep = classend(ms, p);  /* points to optional suffix */
+                    const ep = classend(ms, p);  /* points to optional suffix */
                     /* does not match at least once? */
                     if (!singlematch(ms, s, p, ep)) {
                         if (ms.p[ep] === 42 /* '*'.charCodeAt(0) */ ||
@@ -1465,7 +1477,7 @@ const push_onecapture = function(ms, i, s, e) {
         else
             luaL_error(ms.L, to_luastring("invalid capture index %%%d"), i + 1);
     } else {
-        let l = ms.capture[i].len;
+        const l = ms.capture[i].len;
         if (l === CAP_UNFINISHED) luaL_error(ms.L, to_luastring("unfinished capture"));
         if (l === CAP_POSITION)
             lua_pushinteger(ms.L, ms.capture[i].init - ms.src_init + 1);
@@ -1475,7 +1487,7 @@ const push_onecapture = function(ms, i, s, e) {
 };
 
 const push_captures = function(ms, s, e) {
-    let nlevels = (ms.level === 0 && s != null) ? 1 : ms.level;
+    const nlevels = (ms.level === 0 && s != null) ? 1 : ms.level;
     luaL_checkstack(ms.L, nlevels, "too many captures");
     for (let i = 0; i < nlevels; i++)
         push_onecapture(ms, i, s, e);
@@ -1506,8 +1518,8 @@ const reprepstate = function(ms) {
 };
 
 const find_subarray = function(arr, subarr, from_index) {
-    let i = from_index >>> 0,
-        sl = subarr.length;
+    let i = from_index >>> 0;
+    const sl = subarr.length;
 
     if (sl === 0)
         return i;
@@ -1521,9 +1533,9 @@ const find_subarray = function(arr, subarr, from_index) {
 };
 
 const str_find_aux = function(L, find) {
-    let s = luaL_checkstring(L, 1);
+    const s = luaL_checkstring(L, 1);
     let p = luaL_checkstring(L, 2);
-    let ls = s.length;
+    const ls = s.length;
     let lp = p.length;
     let init = posrelat(luaL_optinteger(L, 3, 1), ls);
     if (init < 1) init = 1;
@@ -1534,16 +1546,16 @@ const str_find_aux = function(L, find) {
     /* explicit request or no special characters? */
     if (find && (lua_toboolean(L, 4) || nospecials(p, lp))) {
         /* do a plain search */
-        let f = find_subarray(s.subarray(init - 1), p, 0);
+        const f = find_subarray(s.subarray(init - 1), p, 0);
         if (f > -1) {
             lua_pushinteger(L, init + f);
             lua_pushinteger(L, init + f + lp - 1);
             return 2;
         }
     } else {
-        let ms = new MatchState(L);
+        const ms = new MatchState(L);
         let s1 = init - 1;
-        let anchor = p[0] === 94 /* '^'.charCodeAt(0) */;
+        const anchor = p[0] === 94 /* '^'.charCodeAt(0) */;
         if (anchor) {
             p = p.subarray(1); lp--;  /* skip anchor character */
         }
@@ -1584,7 +1596,7 @@ class GMatchState {
 }
 
 const gmatch_aux = function(L) {
-    let gm = lua_touserdata(L, lua_upvalueindex(3));
+    const gm = lua_touserdata(L, lua_upvalueindex(3));
     gm.ms.L = L;
     for (let src = gm.src; src <= gm.ms.src_end; src++) {
         reprepstate(gm.ms);
@@ -1598,12 +1610,12 @@ const gmatch_aux = function(L) {
 };
 
 const str_gmatch = function(L) {
-    let s = luaL_checkstring(L, 1);
-    let p = luaL_checkstring(L, 2);
-    let ls = s.length;
-    let lp = p.length;
+    const s = luaL_checkstring(L, 1);
+    const p = luaL_checkstring(L, 2);
+    const ls = s.length;
+    const lp = p.length;
     lua_settop(L, 2);  /* keep them on closure to avoid being collected */
-    let gm = new GMatchState();
+    const gm = new GMatchState();
     lua_pushlightuserdata(L, gm);
     prepstate(gm.ms, L, s, ls, p, lp);
     gm.src = 0;
@@ -1614,9 +1626,9 @@ const str_gmatch = function(L) {
 };
 
 const add_s = function(ms, b, s, e) {
-    let L = ms.L;
-    let news = lua_tostring(L, 3);
-    let l = news.length;
+    const L = ms.L;
+    const news = lua_tostring(L, 3);
+    const l = news.length;
     for (let i = 0; i < l; i++) {
         if (news[i] !== L_ESC)
             luaL_addchar(b, news[i]);
@@ -1639,11 +1651,11 @@ const add_s = function(ms, b, s, e) {
 };
 
 const add_value = function(ms, b, s, e, tr) {
-    let L = ms.L;
+    const L = ms.L;
     switch (tr) {
         case LUA_TFUNCTION: {
             lua_pushvalue(L, 3);
-            let n = push_captures(ms, s, e);
+            const n = push_captures(ms, s, e);
             lua_call(L, n, 1);
             break;
         }
@@ -1667,16 +1679,16 @@ const add_value = function(ms, b, s, e, tr) {
 
 const str_gsub = function(L) {
     let src = luaL_checkstring(L, 1);  /* subject */
-    let srcl = src.length;
+    const srcl = src.length;
     let p = luaL_checkstring(L, 2);  /* pattern */
     let lp = p.length;
     let lastmatch = null;  /* end of last match */
-    let tr = lua_type(L, 3);  /* replacement type */
-    let max_s = luaL_optinteger(L, 4, srcl + 1);  /* max replacements */
-    let anchor = p[0] === 94 /* '^'.charCodeAt(0) */;
+    const tr = lua_type(L, 3);  /* replacement type */
+    const max_s = luaL_optinteger(L, 4, srcl + 1);  /* max replacements */
+    const anchor = p[0] === 94 /* '^'.charCodeAt(0) */;
     let n = 0;  /* replacement count */
-    let ms = new MatchState(L);
-    let b = new luaL_Buffer();
+    const ms = new MatchState(L);
+    const b = new luaL_Buffer();
     luaL_argcheck(L, tr === LUA_TNUMBER || tr === LUA_TSTRING || tr === LUA_TFUNCTION || tr === LUA_TTABLE, 3,
         "string/function/table expected");
     luaL_buffinit(L, b);

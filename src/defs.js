@@ -24,7 +24,7 @@ const is_luastring = function(s) {
 /* test two lua strings for equality */
 const luastring_eq = function(a, b) {
     if (a !== b) {
-        let len = a.length;
+        const len = a.length;
         if (len !== b.length) return false;
         /* XXX: Should this be a constant time algorithm? */
         for (let i=0; i<len; i++)
@@ -44,7 +44,7 @@ const to_jsstring = function(value, from, to, replacement_char) {
     }
 
     let str = "";
-    let start = (from!==void 0?from:0);
+    const start = (from!==void 0?from:0);
     /* Fast path: when the entire range is pure ASCII, decode in one shot.
        This avoids the O(n^2) cost of per-character string concatenation for
        the overwhelmingly common case of ASCII-only lua strings. */
@@ -173,11 +173,11 @@ const to_luastring = function(str, cache) {
     if (typeof str !== "string") throw new TypeError("to_luastring expects a javascript string");
 
     if (cache) {
-        let cached = to_luastring_cache[str];
+        const cached = to_luastring_cache[str];
         if (is_luastring(cached)) return cached;
     }
 
-    let len = str.length;
+    const len = str.length;
     let outU8Array = Array(len); /* array is at *least* going to be length of string */
     let outIdx = 0;
     for (let i = 0; i < len; ++i) {
@@ -191,7 +191,7 @@ const to_luastring = function(str, cache) {
             /* Handle surrogate pairs (UTF-16) to correctly encode astral code points */
             if (u >= 0xD800 && u <= 0xDBFF && (i+1) < len) {
                 /* is first half of surrogate pair */
-                let v = str.charCodeAt(i+1);
+                const v = str.charCodeAt(i+1);
                 if (v >= 0xDC00 && v <= 0xDFFF) {
                     /* is valid low surrogate */
                     i++;

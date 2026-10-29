@@ -288,7 +288,7 @@ const auxgetinfo = (L, what, ar, f, ci) => {
 
 const lua_getinfo = (L, what, ar) => {
     what = from_userstring(what);
-    let status, cl, ci, func;
+    let ci, func;
     swapextra(L);
     if (what[0] === 62 /* '>' */) {
         ci = null;
@@ -302,8 +302,9 @@ const lua_getinfo = (L, what, ar) => {
         lua_assert(ci.func.ttisfunction());
     }
 
-    cl = func.ttisclosure() ? func.value : null;
-    status = auxgetinfo(L, what, ar, cl, ci);
+    const cl = func.ttisclosure() ? func.value : null;
+    const status = auxgetinfo(L, what, ar, cl, ci);
+
     if (luastring_indexOf(what, 102 /* 'f' */) >= 0) {
         lobject.pushobj2s(L, func);
         api_check(L, L.top <= L.ci.top, "stack overflow");

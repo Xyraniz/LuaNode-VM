@@ -117,7 +117,7 @@ const db_getmetatable = (L) => {
 
 const db_setmetatable = (L) => {
     const t = lua_type(L, 2);
-    luaL_argcheck(L, t == LUA_TNIL || t == LUA_TTABLE, 2, "nil or table expected");
+    luaL_argcheck(L, t === LUA_TNIL || t === LUA_TTABLE, 2, "nil or table expected");
     lua_settop(L, 2);
     lua_setmetatable(L, 1);
     return 1;
@@ -162,7 +162,7 @@ const settabsb = (L, k, v) => {
 };
 
 const treatstackoption = (L, L1, fname) => {
-    if (L == L1)
+    if (L === L1)
         lua_rotate(L, -2, 1);
     else
         lua_xmove(L1, L, 1);

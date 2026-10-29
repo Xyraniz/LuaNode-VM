@@ -106,7 +106,7 @@ const l_srand = function(x) {
 const math_random = function(L) {
     let low, up;
     /* use Math.random until randomseed is called */
-    let r = (rand_state_words === null && rand_state === void 0) ? Math.random() : (l_rand() / 0x100000000);
+    const r = (rand_state_words === null && rand_state === void 0) ? Math.random() : (l_rand() / 0x100000000);
     switch (lua_gettop(L)) {  /* check number of arguments */
         case 0:
             lua_pushnumber(L, r);  /* Number between 0 and 1 */
@@ -203,14 +203,14 @@ const math_acos = function(L) {
 };
 
 const math_atan = function(L) {
-    let y = luaL_checknumber(L, 1);
-    let x = luaL_optnumber(L, 2, 1);
+    const y = luaL_checknumber(L, 1);
+    const x = luaL_optnumber(L, 2, 1);
     lua_pushnumber(L, Math.atan2(y, x));
     return 1;
 };
 
 const math_toint = function(L) {
-    let n = lua_tointegerx(L, 1);
+    const n = lua_tointegerx(L, 1);
     if (n !== false)
         lua_pushinteger(L, n);
     else {
@@ -221,7 +221,7 @@ const math_toint = function(L) {
 };
 
 const pushnumint = function(L, d) {
-    let n = lua_numbertointeger(d);
+    const n = lua_numbertointeger(d);
     if (n !== false)  /* does 'd' fit in an integer? */
         lua_pushinteger(L, n);  /* result is integer */
     else
@@ -260,19 +260,19 @@ const math_ult = function(L) {
     ** large integers now carry. Route through lint64.ult, which masks both
     ** operands to uint64 and compares them exactly.
     */
-    let a = luaL_checkinteger(L, 1);
-    let b = luaL_checkinteger(L, 2);
+    const a = luaL_checkinteger(L, 1);
+    const b = luaL_checkinteger(L, 2);
     lua_pushboolean(L, I64.ult(a, b));
     return 1;
 };
 
 const math_log = function(L) {
-    let x = luaL_checknumber(L, 1);
+    const x = luaL_checknumber(L, 1);
     let res;
     if (lua_isnoneornil(L, 2))
         res = Math.log(x);
     else {
-        let base = luaL_checknumber(L, 2);
+        const base = luaL_checknumber(L, 2);
         if (base === 2)
             res = Math.log2(x);
         else if (base === 10)
@@ -300,7 +300,7 @@ const math_rad = function(L) {
 };
 
 const math_min = function(L) {
-    let n = lua_gettop(L);  /* number of arguments */
+    const n = lua_gettop(L);  /* number of arguments */
     let imin = 1;  /* index of current minimum value */
     luaL_argcheck(L, n >= 1, 1, "value expected");
     for (let i = 2; i <= n; i++){
@@ -312,7 +312,7 @@ const math_min = function(L) {
 };
 
 const math_max = function(L) {
-    let n = lua_gettop(L);  /* number of arguments */
+    const n = lua_gettop(L);  /* number of arguments */
     let imax = 1;  /* index of current maximum value */
     luaL_argcheck(L, n >= 1, 1, "value expected");
     for (let i = 2; i <= n; i++){
@@ -346,8 +346,8 @@ const math_fmod = function(L) {
         ** the remainder via BigInt to keep full int64 precision; this
         ** matches the truncated (not floored) semantics of fmod.
         */
-        let a = lua_tointeger(L, 1);
-        let d = lua_tointeger(L, 2);
+        const a = lua_tointeger(L, 1);
+        const d = lua_tointeger(L, 2);
         if (I64.eq(d, 0)) {
             luaL_argerror(L, 2, "zero");
         } else {
@@ -355,8 +355,8 @@ const math_fmod = function(L) {
             lua_pushinteger(L, I64.shrink(I64.toBigInt(a) % I64.toBigInt(d)));
         }
     } else {
-        let a = luaL_checknumber(L, 1);
-        let b = luaL_checknumber(L, 2);
+        const a = luaL_checknumber(L, 1);
+        const b = luaL_checknumber(L, 2);
         lua_pushnumber(L, a%b);
     }
     return 1;
@@ -367,8 +367,8 @@ const math_modf = function(L) {
         lua_settop(L, 1);  /* number is its own integer part */
         lua_pushnumber(L, 0);  /* no fractional part */
     } else {
-        let n = luaL_checknumber(L, 1);
-        let ip = n < 0 ? Math.ceil(n) : Math.floor(n);
+        const n = luaL_checknumber(L, 1);
+        const ip = n < 0 ? Math.ceil(n) : Math.floor(n);
         pushnumint(L, ip);
         lua_pushnumber(L, n === ip ? 0 : n - ip);
     }

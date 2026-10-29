@@ -18,9 +18,6 @@ const {
     to_jsstring,
     to_luastring
 } = require('../defs.js');
-const {
-    LUA_MAXINTEGER
-} = require('../luaconf.js');
 const { lua_assert } = require('./llimits.js');
 const I64 = require('./lint64.js');
 const ldebug  = require('./ldebug.js');
@@ -33,7 +30,7 @@ const {
 const lstate  = require('./lstate.js');
 
 /* used to prevent conflicts with lightuserdata keys */
-let lightuserdata_hashes = new WeakMap();
+const lightuserdata_hashes = new WeakMap();
 const get_lightuserdata_hash = function(v) {
     let hash = lightuserdata_hashes.get(v);
     if (!hash) {
@@ -72,7 +69,7 @@ const table_hash = function(L, key) {
         case LUA_TLNGSTR:
             return luaS_hashlongstr(key.tsvalue());
         case LUA_TLIGHTUSERDATA: {
-            let v = key.value;
+            const v = key.value;
             switch(typeof v) {
                 case "string":
                     /* possible conflict with LUA_TSTRING.
@@ -113,6 +110,8 @@ const table_hash = function(L, key) {
 class Table {
     constructor(L) {
         this.id = L.l_G.id_counter++;
+        this.gc = L.l_G.gc;
+        this.memoryBytes = 64;
         this.strong = new Map();
         this.weakKeys = new WeakMap();
         this.dead_strong = new Map();
@@ -124,7 +123,8 @@ class Table {
         this.finalized = false;
         this.finalizerPending = false;
         this.flags = ~0;
-        L.l_G.gc.tables.add(this);
+        this.gc.tables.add(this);
+        this.gc.memoryBytes += this.memoryBytes;
     }
 }
 
@@ -133,10 +133,13 @@ const invalidateTMcache = function(t) {
 };
 
 const add = function(t, hash, key, value) {
+    const clearedDeadBytes = t.dead_strong.size * 32;
+    t.memoryBytes += 64 - clearedDeadBytes;
+    t.gc.memoryBytes += 64 - clearedDeadBytes;
     t.dead_strong.clear();
     t.dead_weak = void 0;
     let prev = null;
-    let entry = {
+    const entry = {
         key: key,
         value: value,
         hash: hash,
@@ -164,8 +167,8 @@ const is_collectable = function(value) {
     return is_valid_weakmap_key(value) && !(value instanceof TString);
 };
 const unlinkEntry = function(t, entry) {
-    let next = entry.n;
-    let prev = entry.p;
+    const next = entry.n;
+    const prev = entry.p;
     if (prev) prev.n = next;
     if (next) next.p = prev;
     if (t.f === entry) t.f = next;
@@ -184,6 +187,8 @@ const removeEntry = function(t, entry) {
         t.strong.delete(entry.hash);
     }
     unlinkEntry(t, entry);
+    t.memoryBytes -= 64;
+    t.gc.memoryBytes -= 64;
 };
 
 const materializeKey = function(entry) {
@@ -299,12 +304,12 @@ const luaH_get = function(L, t, key) {
 const luaH_setint = function(t, key, value) {
     const integerKey = I64.normalize(key);
     lua_assert(integerKey !== null && value instanceof lobject.TValue);
-    let hash = integerKey; /* table_hash known result */
+    const hash = integerKey; /* table_hash known result */
     if (value.ttisnil()) {
         mark_dead(t, hash);
         return;
     }
-    let e = getentry(t, hash);
+    const e = getentry(t, hash);
     if (e) {
         e.valueRef = void 0;
         e.weakValue = false;
@@ -313,8 +318,8 @@ const luaH_setint = function(t, key, value) {
             e.weakValue = true;
         }
     } else {
-        let k = new lobject.TValue(LUA_TNUMINT, key);
-        let v = new lobject.TValue(value.type, value.value);
+        const k = new lobject.TValue(LUA_TNUMINT, key);
+        const v = new lobject.TValue(value.type, value.value);
         add(t, hash, k, v);
     }
 };
@@ -322,13 +327,13 @@ const luaH_setint = function(t, key, value) {
 const luaH_setfrom = function(L, t, key, value) {
     lua_assert(key instanceof lobject.TValue);
     refreshWeakMode(L, t);
-    let hash = table_hash(L, key);
+    const hash = table_hash(L, key);
     if (value.ttisnil()) { /* delete */
         mark_dead(t, hash);
         return;
     }
 
-    let e = getentry(t, hash);
+    const e = getentry(t, hash);
     if (e) {
         e.valueRef = void 0;
         e.weakValue = false;
@@ -338,11 +343,11 @@ const luaH_setfrom = function(L, t, key, value) {
         }
     } else {
         let k;
-        let kv = key.value;
+        const kv = key.value;
         if (key.ttisfloat()) {
             /* Canonicalize integral floats to the same key used by integer
                indices, including the rounded 2^63 boundary. */
-            let asInt = float_key_integer(kv);
+            const asInt = float_key_integer(kv);
             if (asInt !== null) {
                 k = new lobject.TValue(LUA_TNUMINT, asInt);
             } else {
@@ -351,7 +356,7 @@ const luaH_setfrom = function(L, t, key, value) {
         } else {
             k = new lobject.TValue(key.type, kv);
         }
-        let v = new lobject.TValue(value.type, value.value);
+        const v = new lobject.TValue(value.type, value.value);
         add(t, hash, k, v);
     }
 };
@@ -373,8 +378,8 @@ const mark_dead = function(t, hash) {
     e.value.setnilvalue();
     e.valueRef = void 0;
     e.weakValue = false;
-    let next = e.n;
-    let prev = e.p;
+    const next = e.n;
+    const prev = e.p;
     e.p = void 0; /* no need to know previous item any more */
     if (prev) prev.n = next;
     if (next) next.p = prev;
@@ -382,6 +387,8 @@ const mark_dead = function(t, hash) {
     if (t.l === e) t.l = prev;
     e.live = false;
     t.strong.delete(hash);
+    t.memoryBytes -= 32;
+    t.gc.memoryBytes -= 32;
     if (is_valid_weakmap_key(hash)) {
         if (!t.dead_weak) t.dead_weak = new WeakMap();
         t.dead_weak.set(hash, e);
@@ -413,15 +420,7 @@ const luaH_isrunning = function(L) {
 };
 
 const luaH_memory = function(L) {
-    let bytes = 0;
-    for (const table of L.l_G.gc.tables) {
-        bytes += 64; /* approximate table and backing-map header */
-        for (let entry = table.f; entry; entry = entry.n)
-            bytes += 64; /* approximate key/value and ordered-entry storage */
-        bytes += table.dead_strong.size * 32;
-    }
-    bytes += L.l_G.gc.userdatas.size * 80; /* userdata header and uservalue */
-    return bytes;
+    return L.l_G.gc.memoryBytes;
 };
 
 const luaH_setpause = function(L, pause) {
@@ -458,6 +457,7 @@ const luaH_collectgarbage = function(L) {
     const marked = new Set();
     const visitedTables = new Set();
     let firstFinalizerError = null;
+    const finalizedTablesThisCycle = new Set();
 
     try {
         if (typeof console !== "undefined" &&
@@ -622,13 +622,14 @@ const luaH_collectgarbage = function(L) {
             }
             table.finalized = true;
             table.finalizerPending = false;
+            finalizedTablesThisCycle.add(table);
             const base = L.top;
             lobject.pushobj2s(L, finalizer);
             lobject.pushobj2s(L, new lobject.TValue(LUA_TTABLE, table));
             if (L.ci.callstatus & lstate.CIST_LUA) {
                 try {
                     ldo.luaD_callnoyield(L, base, 0);
-                } catch (error) {
+                } catch {
                     /* Errors from an automatic finalizer are isolated from the
                        mutator; an explicit collectgarbage call uses pcall below. */
                     L.top = base;
@@ -663,7 +664,7 @@ const luaH_collectgarbage = function(L) {
             if (L.ci.callstatus & lstate.CIST_LUA) {
                 try {
                     ldo.luaD_callnoyield(L, base, 0);
-                } catch (error) {
+                } catch {
                     /* Automatic finalizer errors are isolated from the mutator. */
                     L.top = base;
                     L.status = 0;
@@ -695,12 +696,17 @@ const luaH_collectgarbage = function(L) {
         }
 
         for (const table of allTables) {
-            if (!marked.has(table) && !table.finalizerPending)
+            if (!marked.has(table) && !table.finalizerPending &&
+                !finalizedTablesThisCycle.has(table)) {
                 allTables.delete(table);
+                gc.memoryBytes -= table.memoryBytes;
+            }
         }
         for (const userdata of allUserdata) {
-            if (!marked.has(userdata))
+            if (!marked.has(userdata)) {
                 allUserdata.delete(userdata);
+                gc.memoryBytes -= 80;
+            }
         }
         gc.baselineObjectCount = allTables.size + allUserdata.size;
         return firstFinalizerError;
@@ -740,7 +746,7 @@ const luaH_close = function(L) {
             lobject.pushobj2s(L, new lobject.TValue(LUA_TTABLE, table));
             try {
                 lapi.lua_pcall(L, 1, 0, 0);
-            } catch (error) {
+            } catch {
                 L.status = 0;
             } finally {
                 L.top = base;
@@ -758,7 +764,7 @@ const luaH_close = function(L) {
             lobject.pushobj2s(L, new lobject.TValue(LUA_TUSERDATA, userdata));
             try {
                 lapi.lua_pcall(L, 1, 0, 0);
-            } catch (error) {
+            } catch {
                 L.status = 0;
             } finally {
                 L.top = base;
@@ -767,6 +773,7 @@ const luaH_close = function(L) {
     } finally {
         gc.tables.clear();
         gc.userdatas.clear();
+        gc.memoryBytes = 0;
         gc.allocationsSinceCollection = 0;
         gc.instructionsSinceCollection = 0;
         gc.baselineObjectCount = 0;
@@ -796,7 +803,7 @@ const luaH_getn = function(t) {
     }
     /* now do a binary search between them */
     while (j - i > 1) {
-        let m = Math.floor((i+j)/2);
+        const m = Math.floor((i+j)/2);
         if (luaH_getint(t, m).ttisnil()) j = m;
         else i = m;
     }
@@ -804,14 +811,14 @@ const luaH_getn = function(t) {
 };
 
 const luaH_next = function(L, table, keyI) {
-    let keyO = L.stack[keyI];
+    const keyO = L.stack[keyI];
 
     let entry;
     if (keyO.type === LUA_TNIL) {
         entry = table.f;
     } else {
         /* First find current key */
-        let hash = table_hash(L, keyO);
+        const hash = table_hash(L, keyO);
         entry = getentry(table, hash);
         if (entry) {
             entry = entry.n;

@@ -35,7 +35,7 @@ const luaF_close = function(L, level) {
     /* Create new TValues on stack;
      * any closures will keep referencing old TValues */
     for (let i=level; i<L.top; i++) {
-        let old = L.stack[i];
+        const old = L.stack[i];
         L.stack[i] = new lobject.TValue(old.type, old.value);
     }
 };

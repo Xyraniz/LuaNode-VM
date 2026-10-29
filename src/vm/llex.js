@@ -127,7 +127,7 @@ const luaX_tokens = [
     "//", "..", "...", "==", ">=", "<=", "~=",
     "<<", ">>", "::", "<eof>",
     "<number>", "<integer>", "<name>", "<string>"
-].map((e, i)=>to_luastring(e));
+].map(e => to_luastring(e));
 
 class SemInfo {
     constructor() {
@@ -165,7 +165,7 @@ class LexState {
 }
 
 const save = function(ls, c) {
-    let b = ls.buff;
+    const b = ls.buff;
     if (b.n + 1 > b.buffer.length) {
         /* MAX_INT is a BigInt (the real 2^63-1, see llimits.js), so the
            "lexical element too long" guard must avoid mixing BigInt with a
@@ -176,7 +176,7 @@ const save = function(ls, c) {
            in full BigInt so the check is exact and never raises. */
         if (BigInt(b.buffer.length) >= MAX_INT / 2n)
             lexerror(ls, to_luastring("lexical element too long", true), 0);
-        let newsize = b.buffer.length*2;
+        const newsize = b.buffer.length*2;
         luaZ_resizebuffer(ls.L, b, newsize);
     }
     b.buffer[b.n++] = c < 0 ? 255 + c + 1 : c;
@@ -186,7 +186,7 @@ const luaX_token2str = function(ls, token) {
     if (token < FIRST_RESERVED) {  /* single-byte symbols? */
         return lobject.luaO_pushfstring(ls.L, to_luastring("'%c'", true), token);
     } else {
-        let s = luaX_tokens[token - FIRST_RESERVED];
+        const s = luaX_tokens[token - FIRST_RESERVED];
         if (token < TK_EOS)  /* fixed format (symbols and reserved words)? */
             return lobject.luaO_pushfstring(ls.L, to_luastring("'%s'", true), s);
         else  /* names, strings, and numerals */
@@ -214,12 +214,12 @@ const save_and_next = function(ls) {
 */
 const TVtrue = new lobject.TValue(LUA_TBOOLEAN, true);
 const luaX_newstring = function(ls, str) {
-    let L = ls.L;
+    const L = ls.L;
     let ts = luaS_new(L, str);
     /* HACK: Workaround lack of ltable 'keyfromval' */
-    let tpair = ls.h.strong.get(luaS_hashlongstr(ts));
+    const tpair = ls.h.strong.get(luaS_hashlongstr(ts));
     if (!tpair) { /* not in use yet? */
-        let key = new lobject.TValue(LUA_TLNGSTR, ts);
+        const key = new lobject.TValue(LUA_TLNGSTR, ts);
         ltable.luaH_setfrom(L, ls.h, key, TVtrue);
     } else { /* string already present */
         ts = tpair.key.tsvalue(); /* re-use value previously stored */
@@ -232,7 +232,7 @@ const luaX_newstring = function(ls, str) {
 ** \n, \r, \n\r, or \r\n)
 */
 const inclinenumber = function(ls) {
-    let old = ls.current;
+    const old = ls.current;
     lua_assert(currIsNewline(ls));
     next(ls);  /* skip '\n' or '\r' */
     if (currIsNewline(ls) && ls.current !== old)
@@ -285,7 +285,7 @@ const check_next2 = function(ls, set) {
 
 const read_numeral = function(ls, seminfo) {
     let expo = "Ee";
-    let first = ls.current;
+    const first = ls.current;
     lua_assert(lisdigit(ls.current));
     save_and_next(ls);
     if (first === 48 /* ('0').charCodeAt(0) */ && check_next2(ls, "xX"))  /* hexadecimal? */
@@ -303,7 +303,7 @@ const read_numeral = function(ls, seminfo) {
 
     // save(ls, 0);
 
-    let obj = new lobject.TValue();
+    const obj = new lobject.TValue();
     if (lobject.luaO_str2num(luaZ_buffer(ls.buff), obj) === 0)  /* format error? */
         lexerror(ls, to_luastring("malformed number", true), TK_FLT);
     if (obj.ttisinteger()) {
@@ -345,7 +345,7 @@ const luaX_syntaxerror = function(ls, msg) {
 */
 const skip_sep = function(ls) {
     let count = 0;
-    let s = ls.current;
+    const s = ls.current;
     lua_assert(s === 91 /* ('[').charCodeAt(0) */ || s === 93 /* (']').charCodeAt(0) */);
     save_and_next(ls);
     while (ls.current === 61 /* ('=').charCodeAt(0) */) {
@@ -356,7 +356,7 @@ const skip_sep = function(ls) {
 };
 
 const read_long_string = function(ls, seminfo, sep) {
-    let line = ls.linenumber;  /* initial line (for error message) */
+    const line = ls.linenumber;  /* initial line (for error message) */
     save_and_next(ls);  /* skip 2nd '[' */
 
     if (currIsNewline(ls))  /* string starts with a newline? */
@@ -366,8 +366,8 @@ const read_long_string = function(ls, seminfo, sep) {
     for (; !skip ;) {
         switch (ls.current) {
             case EOZ: {  /* error */
-                let what = seminfo ? "string" : "comment";
-                let msg = `unfinished long ${what} (starting at line ${line})`;
+                const what = seminfo ? "string" : "comment";
+                const msg = `unfinished long ${what} (starting at line ${line})`;
                 lexerror(ls, to_luastring(msg), TK_EOS);
                 break;
             }
@@ -437,7 +437,7 @@ const readutf8desc = function(ls) {
 };
 
 const utf8esc = function(ls) {
-    let buff = new Uint8Array(lobject.UTF8BUFFSZ);
+    const buff = new Uint8Array(lobject.UTF8BUFFSZ);
     let n = lobject.luaO_utf8esc(buff, readutf8desc(ls));
     for (; n > 0; n--)  /* add 'buff' to string */
         save(ls, buff[lobject.UTF8BUFFSZ - n]);
@@ -528,7 +528,7 @@ const token_to_index = Object.create(null); /* don't want to return true for e.g
 luaX_tokens.forEach((e, i)=>token_to_index[luaS_hash(e)] = i);
 
 const isreserved = function(w) {
-    let kidx = token_to_index[luaS_hashlongstr(w)];
+    const kidx = token_to_index[luaS_hashlongstr(w)];
     return kidx !== void 0 && kidx <= 22;
 };
 
@@ -555,7 +555,7 @@ const llex = function(ls, seminfo) {
                 /* else is a comment */
                 next(ls);
                 if (ls.current === 91 /* ('[').charCodeAt(0) */) {  /* long comment? */
-                    let sep = skip_sep(ls);
+                    const sep = skip_sep(ls);
                     luaZ_resetbuffer(ls.buff);  /* 'skip_sep' may dirty the buffer */
                     if (sep >= 0) {
                         read_long_string(ls, null, sep);  /* skip long comment */
@@ -570,7 +570,7 @@ const llex = function(ls, seminfo) {
                 break;
             }
             case 91 /* ('[').charCodeAt(0) */: {  /* long string or simply '[' */
-                let sep = skip_sep(ls);
+                const sep = skip_sep(ls);
                 if (sep >= 0) {
                     read_long_string(ls, seminfo, sep);
                     return TK_STRING;
@@ -637,15 +637,15 @@ const llex = function(ls, seminfo) {
                     do {
                         save_and_next(ls);
                     } while (lislalnum(ls.current));
-                    let ts = luaX_newstring(ls, luaZ_buffer(ls.buff));
+                    const ts = luaX_newstring(ls, luaZ_buffer(ls.buff));
                     seminfo.ts = ts;
-                    let kidx = token_to_index[luaS_hashlongstr(ts)];
+                    const kidx = token_to_index[luaS_hashlongstr(ts)];
                     if (kidx !== void 0 && kidx <= 22)  /* reserved word? */
                         return kidx + FIRST_RESERVED;
                     else
                         return TK_NAME;
                 } else {  /* single-char tokens (+ - / ...) */
-                    let c = ls.current;
+                    const c = ls.current;
                     next(ls);
                     return c;
                 }

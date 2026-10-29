@@ -123,7 +123,7 @@ const addfield = function(L, b, i) {
 
 const tinsert = function(L) {
     const raw = has_raw_rw(L, 1);
-    let e = aux_getn(L, 1, TAB_RW) + 1;
+    const e = aux_getn(L, 1, TAB_RW) + 1;
     let pos;
     switch (lua_gettop(L)) {
         case 2:
@@ -151,7 +151,7 @@ const tinsert = function(L) {
 };
 
 const tremove = function(L) {
-    let size = aux_getn(L, 1, TAB_RW);
+    const size = aux_getn(L, 1, TAB_RW);
     let pos = luaL_optinteger(L, 2, size);
     if (pos !== size)  /* validate 'pos' if given */
         luaL_argcheck(L, 1 <= pos && pos <= size + 1, 1, "position out of bounds");
@@ -172,16 +172,16 @@ const tremove = function(L) {
 ** than origin, or copying to another table.
 */
 const tmove = function(L) {
-    let f = luaL_checkinteger(L, 2);
-    let e = luaL_checkinteger(L, 3);
-    let t = luaL_checkinteger(L, 4);
-    let tt = !lua_isnoneornil(L, 5) ? 5 : 1;  /* destination table */
+    const f = luaL_checkinteger(L, 2);
+    const e = luaL_checkinteger(L, 3);
+    const t = luaL_checkinteger(L, 4);
+    const tt = !lua_isnoneornil(L, 5) ? 5 : 1;  /* destination table */
     checktab(L, 1, TAB_R);
     checktab(L, tt, TAB_W);
     luaL_argcheck(L, I64.lt(0, f), 2, "must be positive");
     if (e >= f) {  /* otherwise, nothing to move */
         luaL_argcheck(L, I64.lt(0, f) || I64.lt(e, I64.add(LUA_MAXINTEGER, f)), 3, "too many elements to move");
-        let n = I64.sub(I64.add(e, 1), f);  /* number of elements to move */
+        const n = I64.sub(I64.add(e, 1), f);  /* number of elements to move */
         luaL_argcheck(L, I64.le(t, I64.add(I64.sub(LUA_MAXINTEGER, n), 1)), 4, "destination wrap around");
 
         if (t > e || t <= f || (tt !== 1 && lua_compare(L, 1, tt, LUA_OPEQ) !== 1)) {
@@ -203,12 +203,12 @@ const tmove = function(L) {
 
 const tconcat = function(L) {
     let last = aux_getn(L, 1, TAB_R);
-    let sep = luaL_optlstring(L, 2, "");
-    let lsep = sep.length;
+    const sep = luaL_optlstring(L, 2, "");
+    const lsep = sep.length;
     let i = luaL_optinteger(L, 3, 1);
     last = luaL_optinteger(L, 4, last);
 
-    let b = new luaL_Buffer();
+    const b = new luaL_Buffer();
     luaL_buffinit(L, b);
 
     for (; i < last; i++) {
@@ -225,7 +225,7 @@ const tconcat = function(L) {
 };
 
 const pack = function(L) {
-    let n = lua_gettop(L);  /* number of elements to pack */
+    const n = lua_gettop(L);  /* number of elements to pack */
     lua_createtable(L, n, 1);  /* create result table */
     lua_insert(L, 1);  /* put it at index 1 */
     for (let i = n; i >= 1; i--)  /* assign elements */
@@ -238,10 +238,10 @@ const pack = function(L) {
 const unpack = function(L) {
     /* Keep the range arithmetic exact for math.mininteger/maxinteger. */
     let i = BigInt(luaL_optinteger(L, 2, 1));
-    let e = BigInt(luaL_opt(L, luaL_checkinteger, 3, luaL_len(L, 1)));
+    const e = BigInt(luaL_opt(L, luaL_checkinteger, 3, luaL_len(L, 1)));
     if (i > e) return 0;  /* empty range */
 
-    let count = e - i;  /* number of elements minus 1 (avoid overflows) */
+    const count = e - i;  /* number of elements minus 1 (avoid overflows) */
     if (count >= BigInt(Number.MAX_SAFE_INTEGER))
         return luaL_error(L, to_luastring("too many results to unpack"));
 
@@ -282,7 +282,7 @@ const sort_comp = function(L, a, b) {
         lua_pushvalue(L, a-1);  /* -1 to compensate function */
         lua_pushvalue(L, b-2);  /* -2 to compensate function and 'a' */
         lua_call(L, 2, 1);      /* call function */
-        let res = lua_toboolean(L, -1);  /* get result */
+        const res = lua_toboolean(L, -1);  /* get result */
         lua_pop(L, 1);          /* pop result */
         return res;
     }
@@ -295,7 +295,7 @@ const partition = function(L, lo, up, raw) {
     for (;;) {
         /* next loop: repeat ++i while a[i] < P */
         while (getitem(L, raw, ++i), sort_comp(L, -1, -2)) {
-            if (i == up - 1)  /* a[i] < P  but a[up - 1] == P  ?? */
+            if (i === up - 1)  /* a[i] < P  but a[up - 1] == P  ?? */
                 luaL_error(L, to_luastring("invalid order function for sorting"));
             lua_pop(L, 1);  /* remove a[i] */
         }
@@ -320,8 +320,8 @@ const partition = function(L, lo, up, raw) {
 };
 
 const choosePivot = function(lo, up, rnd) {
-    let r4 = Math.floor((up - lo) / 4);  /* range/4 */
-    let p = rnd % (r4 * 2) + (lo + r4);
+    const r4 = Math.floor((up - lo) / 4);  /* range/4 */
+    const p = rnd % (r4 * 2) + (lo + r4);
     lualib.lua_assert(lo + r4 <= p && p <= up - r4);
     return p;
 };
@@ -335,7 +335,7 @@ const auxsort = function(L, lo, up, rnd, raw) {
             set2(L, lo, up, raw);  /* swap a[lo] - a[up] */
         else
             lua_pop(L, 2);  /* remove both values */
-        if (up - lo == 1)  /* only 2 elements? */
+        if (up - lo === 1)  /* only 2 elements? */
             return;  /* already sorted */
         let p;  /* Pivot index */
         if (up - lo < RANLIMIT || rnd === 0)  /* small interval or no randomize? */
@@ -354,7 +354,7 @@ const auxsort = function(L, lo, up, rnd, raw) {
             else
                 lua_pop(L, 2);
         }
-        if (up - lo == 2)  /* only 3 elements? */
+        if (up - lo === 2)  /* only 3 elements? */
             return;  /* already sorted */
         getitem(L, raw, p);  /* get middle element (Pivot) */
         lua_pushvalue(L, -1);  /* push Pivot */
@@ -458,7 +458,7 @@ const sortNumericFast = function(L, n, raw) {
 
 const sort = function(L) {
     const raw = has_raw_rw(L, 1);
-    let n = aux_getn(L, 1, TAB_RW);
+    const n = aux_getn(L, 1, TAB_RW);
     if (n > 1) {  /* non-trivial interval? */
         luaL_argcheck(L, n < LUA_MAXINTEGER, 1, "array too big");
         if (!lua_isnoneornil(L, 2))  /* is there a 2nd argument? */

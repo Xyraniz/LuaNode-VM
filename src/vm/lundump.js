@@ -41,7 +41,7 @@ const {
     ZIO
 } = require('./lzio.js');
 
-let LUAC_DATA = [0x19, 0x93, 13, 10, 0x1a, 10];
+const LUAC_DATA = [0x19, 0x93, 13, 10, 0x1a, 10];
 
 class BytecodeParser {
 
@@ -57,7 +57,7 @@ class BytecodeParser {
 
         if (name[0] === 64 /* ('@').charCodeAt(0) */ || name[0] === 61 /* ('=').charCodeAt(0) */)
             this.name = name.subarray(1);
-        else if (name[0] == LUA_SIGNATURE[0])
+        else if (name[0] === LUA_SIGNATURE[0])
             this.name = to_luastring("binary string", true);
         else
             this.name = name;
@@ -74,7 +74,7 @@ class BytecodeParser {
     }
 
     read(size) {
-        let u8 = new Uint8Array(size);
+        const u8 = new Uint8Array(size);
         if(luaZ_read(this.Z, u8, 0, size) !== 0)
             this.error("truncated");
         return u8;
@@ -128,13 +128,13 @@ class BytecodeParser {
     }
 
     LoadCode(f) {
-        let n = this.LoadInt();
-        let p = BytecodeParser;
+        const n = this.LoadInt();
+        const p = BytecodeParser;
 
         for (let i = 0; i < n; i++) {
             if (luaZ_read(this.Z, this.u8, 0, this.instructionSize) !== 0)
                 this.error("truncated");
-            let ins = this.dv.getUint32(0, true);
+            const ins = this.dv.getUint32(0, true);
             f.code[i] = {
                 code:   ins,
                 opcode: (ins >> POS_OP) & p.MASK1(SIZE_OP, 0),
@@ -149,10 +149,10 @@ class BytecodeParser {
     }
 
     LoadConstants(f) {
-        let n = this.LoadInt();
+        const n = this.LoadInt();
 
         for (let i = 0; i < n; i++) {
-            let t = this.LoadByte();
+            const t = this.LoadByte();
 
             switch (t) {
                 case LUA_TNIL:
@@ -178,7 +178,7 @@ class BytecodeParser {
     }
 
     LoadProtos(f) {
-        let n = this.LoadInt();
+        const n = this.LoadInt();
 
         for (let i = 0; i < n; i++) {
             f.p[i] = new lfunc.Proto(this.L);
@@ -187,7 +187,7 @@ class BytecodeParser {
     }
 
     LoadUpvalues(f) {
-        let n = this.LoadInt();
+        const n = this.LoadInt();
 
         for (let i = 0; i < n; i++) {
             f.upvalues[i] = {
@@ -235,7 +235,7 @@ class BytecodeParser {
     }
 
     checkliteral(s, msg) {
-        let buff = this.read(s.length);
+        const buff = this.read(s.length);
         if (!luastring_eq(buff, s))
             this.error(msg);
     }
@@ -283,9 +283,9 @@ class BytecodeParser {
 }
 
 const luaU_undump = function(L, Z, name) {
-    let S = new BytecodeParser(L, Z, name);
+    const S = new BytecodeParser(L, Z, name);
     S.checkHeader();
-    let cl = lfunc.luaF_newLclosure(L, S.LoadByte());
+    const cl = lfunc.luaF_newLclosure(L, S.LoadByte());
     ldo.luaD_inctop(L);
     L.stack[L.top-1].setclLvalue(cl);
     cl.p = new lfunc.Proto(L);

@@ -54,11 +54,11 @@ class ZIO {
 const EOZ = -1;
 
 const luaZ_fill = function(z) {
-    let buff = z.reader(z.L, z.data);
+    const buff = z.reader(z.L, z.data);
     if (buff === null)
         return EOZ;
     lua_assert(buff instanceof Uint8Array, "Should only load binary of array of bytes");
-    let size = buff.length;
+    const size = buff.length;
     if (size === 0)
         return EOZ;
     z.buffer = buff;
@@ -79,7 +79,7 @@ const luaZ_read = function(z, b, b_offset, n) {
                 z.off--;
             }
         }
-        let m = (n <= z.n) ? n : z.n; /* min. between n and z->n */
+        const m = (n <= z.n) ? n : z.n; /* min. between n and z->n */
         for (let i=0; i<m; i++) {
             b[b_offset++] = z.buffer[z.off++];
         }

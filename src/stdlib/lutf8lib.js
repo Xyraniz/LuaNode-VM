@@ -32,7 +32,7 @@ const {
 const MAXUNICODE = 0x10FFFF;
 
 const iscont = function(p) {
-    let c = p & 0xC0;
+    const c = p & 0xC0;
     return c === 0x80;
 };
 
@@ -55,7 +55,7 @@ const utf8_decode = function(s, pos) {
     else {
         let count = 0;  /* to count number of continuation bytes */
         while (c & 0x40) {  /* still have continuation bytes? */
-            let cc = s[pos + (++count)];  /* read next byte */
+            const cc = s[pos + (++count)];  /* read next byte */
             if ((cc & 0xC0) !== 0x80)  /* not a continuation byte? */
                 return null;  /* invalid byte sequence */
             res = (res << 6) | (cc & 0x3F);  /* add lower 6 bits from cont. byte */
@@ -80,8 +80,8 @@ const utf8_decode = function(s, pos) {
 */
 const utflen = function(L) {
     let n = 0;
-    let s = luaL_checkstring(L, 1);
-    let len = s.length;
+    const s = luaL_checkstring(L, 1);
+    const len = s.length;
     let posi = u_posrelat(luaL_optinteger(L, 2, 1), len);
     let posj = u_posrelat(luaL_optinteger(L, 3, -1), len);
 
@@ -89,7 +89,7 @@ const utflen = function(L) {
     luaL_argcheck(L, --posj < len, 3, "final position out of string");
 
     while (posi <= posj) {
-        let dec = utf8_decode(s, posi);
+        const dec = utf8_decode(s, posi);
         if (dec === null) { /* conversion error? */
             lua_pushnil(L);  /* return nil ... */
             lua_pushinteger(L, posi + 1);  /* ... and current position */
@@ -104,7 +104,7 @@ const utflen = function(L) {
 
 const p_U = to_luastring("%U");
 const pushutfchar = function(L, arg) {
-    let code = luaL_checkinteger(L, arg);
+    const code = luaL_checkinteger(L, arg);
     luaL_argcheck(L, 0 <= code && code <= MAXUNICODE, arg, "value out of range");
     lua_pushfstring(L, p_U, code);
 };
@@ -113,11 +113,11 @@ const pushutfchar = function(L, arg) {
 ** utfchar(n1, n2, ...)  -> char(n1)..char(n2)...
 */
 const utfchar = function(L) {
-    let n = lua_gettop(L);  /* number of arguments */
+    const n = lua_gettop(L);  /* number of arguments */
     if (n === 1)  /* optimize common case of single char */
         pushutfchar(L, 1);
     else {
-        let b = new luaL_Buffer();
+        const b = new luaL_Buffer();
         luaL_buffinit(L, b);
         for (let i = 1; i <= n; i++) {
             pushutfchar(L, i);
@@ -133,7 +133,7 @@ const utfchar = function(L) {
 **   position 'i' starts; 0 means character at 'i'.
 */
 const byteoffset = function(L) {
-    let s = luaL_checkstring(L, 1);
+    const s = luaL_checkstring(L, 1);
     let n = luaL_checkinteger(L, 2);
     let posi = n >= 0 ? 1 : s.length + 1;
     posi = u_posrelat(luaL_optinteger(L, 3, posi), s.length);
@@ -178,9 +178,9 @@ const byteoffset = function(L) {
 ** that start in the range [i,j]
 */
 const codepoint = function(L) {
-    let s = luaL_checkstring(L, 1);
+    const s = luaL_checkstring(L, 1);
     let posi = u_posrelat(luaL_optinteger(L, 2, 1), s.length);
-    let pose = u_posrelat(luaL_optinteger(L, 3, posi), s.length);
+    const pose = u_posrelat(luaL_optinteger(L, 3, posi), s.length);
 
     luaL_argcheck(L, posi >= 1, 2, "out of range");
     luaL_argcheck(L, pose <= s.length, 3, "out of range");
@@ -192,7 +192,7 @@ const codepoint = function(L) {
     luaL_checkstack(L, n, "string slice too long");
     n = 0;
     for (posi -= 1; posi < pose;) {
-        let dec = utf8_decode(s, posi);
+        const dec = utf8_decode(s, posi);
         if (dec === null)
             return luaL_error(L, "invalid UTF-8 code");
         lua_pushinteger(L, dec.code);
@@ -203,8 +203,8 @@ const codepoint = function(L) {
 };
 
 const iter_aux = function(L) {
-    let s = luaL_checkstring(L, 1);
-    let len = s.length;
+    const s = luaL_checkstring(L, 1);
+    const len = s.length;
     let n = lua_tointeger(L, 2) - 1;
 
     if (n < 0)  /* first iteration? */
@@ -217,7 +217,7 @@ const iter_aux = function(L) {
     if (n >= len)
         return 0;  /* no more codepoints */
     else {
-        let dec = utf8_decode(s, n);
+        const dec = utf8_decode(s, n);
         if (dec === null || iscont(s[dec.pos]))
             return luaL_error(L, to_luastring("invalid UTF-8 code"));
         lua_pushinteger(L, n + 1);

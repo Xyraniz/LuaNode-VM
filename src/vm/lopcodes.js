@@ -322,7 +322,7 @@ const fullins = function(ins) {
             sBx:    ((ins >> POS_Bx) & MASK1(SIZE_Bx, 0)) - MAXARG_sBx
         };
     } else {
-        let i = ins.code;
+        const i = ins.code;
         ins.opcode = (i >> POS_OP) & MASK1(SIZE_OP, 0);
         ins.A      = (i >> POS_A)  & MASK1(SIZE_A,  0);
         ins.B      = (i >> POS_B)  & MASK1(SIZE_B,  0);

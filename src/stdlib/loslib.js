@@ -97,7 +97,7 @@ const setallfields = function(L, time, utc) {
 const L_MAXDATEFIELD = (Number.MAX_SAFE_INTEGER / 2);
 
 const getfield = function(L, key, d, delta) {
-    let t = lua_getfield(L, -1, to_luastring(key, true));  /* get field and its type */
+    const t = lua_getfield(L, -1, to_luastring(key, true));  /* get field and its type */
     let res = lua_tointegerx(L, -1);
     if (res === false) {  /* field is not an integer? */
         if (t !== LUA_TNIL)  /* some other value? */
@@ -147,7 +147,7 @@ const week_number = function(date, start_of_week) {
         else
             weekday--;
     }
-    let yday = (date - new Date(date.getFullYear(), 0, 1)) / 86400000;
+    const yday = (date - new Date(date.getFullYear(), 0, 1)) / 86400000;
     return Math.floor((yday + 7 - weekday) / 7);
 };
 
@@ -164,7 +164,7 @@ const strftime = function(L, b, s, date) {
             luaL_addchar(b, s[i++]);
         } else {
             i++;  /* skip '%' */
-            let len = checkoption(L, s, i);
+            const len = checkoption(L, s, i);
             /* each `case` has an example output above it for the UTC epoch */
             switch(s[i]) {
                 // '%'
@@ -254,7 +254,7 @@ const strftime = function(L, b, s, date) {
 
                 // 'GMT'
                 case 90 /* Z */: {
-                    let tzString = date.toString().match(/\(([\w\s]+)\)/);
+                    const tzString = date.toString().match(/\(([\w\s]+)\)/);
                     if (tzString)
                         luaL_addstring(b, to_luastring(tzString[1]));
                     break;
@@ -288,7 +288,7 @@ const strftime = function(L, b, s, date) {
 
                 // '000'
                 case 106 /* j */: {
-                    let yday = Math.floor((date - new Date(date.getFullYear(), 0, 0)) / 86400000);
+                    const yday = Math.floor((date - new Date(date.getFullYear(), 0, 0)) / 86400000);
                     if (yday < 100) {
                         if (yday < 10)
                             luaL_addchar(b, 48 /* 0 */);
@@ -340,7 +340,7 @@ const strftime = function(L, b, s, date) {
 
                 // '4'
                 case 117 /* u */: {
-                    let day = date.getDay();
+                    const day = date.getDay();
                     luaL_addstring(b, to_luastring(String(day === 0 ? 7 : day)));
                     break;
                 }
@@ -381,7 +381,7 @@ const strftime = function(L, b, s, date) {
 
 
 const checkoption = function(L, conv, i) {
-    let option = LUA_STRFTIMEOPTIONS;
+    const option = LUA_STRFTIMEOPTIONS;
     let o = 0;
     let oplen = 1;  /* length of options being checked */
     for (; o < option.length && oplen <= (conv.length - i); o += oplen) {
@@ -400,8 +400,8 @@ const checkoption = function(L, conv, i) {
 
 
 const os_date = function(L) {
-    let s = luaL_optlstring(L, 1, "%c");
-    let stm = lua_isnoneornil(L, 2) ? new Date() : new Date(l_checktime(L, 2) * 1000);
+    const s = luaL_optlstring(L, 1, "%c");
+    const stm = lua_isnoneornil(L, 2) ? new Date() : new Date(l_checktime(L, 2) * 1000);
     let utc = false;
     let i = 0;
     if (s[i] === '!'.charCodeAt(0)) {  /* UTC? */
@@ -412,7 +412,7 @@ const os_date = function(L) {
         lua_createtable(L, 0, 9);  /* 9 = number of fields */
         setallfields(L, stm, utc);
     } else {
-        let b = new luaL_Buffer();
+        const b = new luaL_Buffer();
         luaL_buffinit(L, b);
         strftime(L, b, s.subarray(i), stm);
         luaL_pushresult(b);
@@ -443,14 +443,14 @@ const os_time = function(L) {
 };
 
 const l_checktime = function(L, arg) {
-    let t = luaL_checkinteger(L, arg);
+    const t = luaL_checkinteger(L, arg);
     // luaL_argcheck(L, t, arg, "time out-of-bounds");
     return t;
 };
 
 const os_difftime = function(L) {
-    let t1 = l_checktime(L, 1);
-    let t2 = l_checktime(L, 2);
+    const t1 = l_checktime(L, 1);
+    const t2 = l_checktime(L, 2);
     lua_pushnumber(L, t1 - t2);
     return 1;
 };
@@ -466,7 +466,7 @@ const os_setlocale = function(L) {
        IEEE Std 1003.1-2017 Section 7.2 as equivalent to "C" */
     lua_pushstring(L, (
         l === null /* passing nil returns the current locale; which is "C" */
-        || l.length == 0 /* empty string resets to the default locale; which is "C" */
+        || l.length === 0 /* empty string resets to the default locale; which is "C" */
         || luastring_eq(l, C) /* user passed "C" */
         || luastring_eq(l, POSIX) /* user passed "POSIX", equivalent to "C" */
     ) ? C : null);
@@ -524,7 +524,7 @@ if (typeof process === "undefined") {
     };
 
     syslib.remove = function(L) {
-        let filename = luaL_checkstring(L, 1);
+        const filename = luaL_checkstring(L, 1);
         try {
             fs.unlinkSync(filename);
         } catch (e) {
@@ -542,8 +542,8 @@ if (typeof process === "undefined") {
     };
 
     syslib.rename = function(L) {
-        let fromname = luaL_checkstring(L, 1);
-        let toname = luaL_checkstring(L, 2);
+        const fromname = luaL_checkstring(L, 1);
+        const toname = luaL_checkstring(L, 2);
         try {
             fs.renameSync(fromname, toname);
         } catch (e) {
@@ -553,7 +553,7 @@ if (typeof process === "undefined") {
     };
 
     syslib.tmpname = function(L) {
-        let name = lua_tmpname();
+        const name = lua_tmpname();
         if (!name)
             return luaL_error(L, to_luastring("unable to generate a unique filename"));
         lua_pushstring(L, to_luastring(name));

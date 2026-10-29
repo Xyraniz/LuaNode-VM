@@ -106,7 +106,7 @@ const luaT_objtypename = function(L, o) {
     let mt;
     if ((o.ttistable() && (mt = o.value.metatable) !== null) ||
         (o.ttisfulluserdata() && (mt = o.value.metatable) !== null)) {
-        let name = ltable.luaH_getstr(mt, luaS_bless(L, __name));
+        const name = ltable.luaH_getstr(mt, luaS_bless(L, __name));
         if (name.ttisstring())
             return name.svalue();
     }
@@ -114,7 +114,7 @@ const luaT_objtypename = function(L, o) {
 };
 
 const luaT_callTM = function(L, f, p1, p2, p3, hasres) {
-    let func = L.top;
+    const func = L.top;
 
     lobject.pushobj2s(L, f); /* push function (assume EXTRA_STACK) */
     lobject.pushobj2s(L, p1); /* 1st argument */
@@ -129,7 +129,7 @@ const luaT_callTM = function(L, f, p1, p2, p3, hasres) {
         ldo.luaD_callnoyield(L, func, hasres);
 
     if (hasres) {  /* if has result, move it to its place */
-        let tv = L.stack[L.top-1];
+        const tv = L.stack[L.top-1];
         delete L.stack[--L.top];
         p3.setfrom(tv);
     }
@@ -151,8 +151,8 @@ const luaT_trybinTM = function(L, p1, p2, res, event) {
                 return ldebug.luaG_concaterror(L, p1, p2);
             case TMS.TM_BAND: case TMS.TM_BOR: case TMS.TM_BXOR:
             case TMS.TM_SHL: case TMS.TM_SHR: case TMS.TM_BNOT: {
-                let n1 = lvm.tonumber(p1);
-                let n2 = lvm.tonumber(p2);
+                const n1 = lvm.tonumber(p1);
+                const n2 = lvm.tonumber(p2);
                 if (n1 !== false && n2 !== false)
                     return ldebug.luaG_tointerror(L, p1, p2);
                 else
@@ -165,7 +165,7 @@ const luaT_trybinTM = function(L, p1, p2, res, event) {
 };
 
 const luaT_callorderTM = function(L, p1, p2, event) {
-    let res = new lobject.TValue();
+    const res = new lobject.TValue();
     if (!luaT_callbinTM(L, p1, p2, res, event))
         return null;
     else

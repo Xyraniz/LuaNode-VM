@@ -86,7 +86,7 @@ const hasjumps = function(e) {
 ** (depending on 'make_tvalue'). Otherwise, returns false.
 */
 const tonumeral = function(e, make_tvalue) {
-    let ek = lparser.expkind;
+    const ek = lparser.expkind;
     if (hasjumps(e))
         return false;  /* not a numeral */
     switch (e.k) {
@@ -116,8 +116,8 @@ const luaK_nil = function(fs, from, n) {
     if (fs.pc > fs.lasttarget) {  /* no jumps to current position? */
         previous = fs.f.code[fs.pc-1];
         if (previous.opcode === OpCodesI.OP_LOADNIL) {  /* previous is LOADNIL? */
-            let pfrom = previous.A;  /* get previous range */
-            let pl = pfrom + previous.B;
+            const pfrom = previous.A;  /* get previous range */
+            const pl = pfrom + previous.B;
             if ((pfrom <= from && from <= pl + 1) ||
                     (from <= pfrom && pfrom <= l + 1)) {  /* can connect both? */
                 if (pfrom < from) from = pfrom;  /* from = min(from, pfrom) */
@@ -140,7 +140,7 @@ const getinstruction = function(fs, e) {
 ** a list of jumps.
 */
 const getjump = function(fs, pc) {
-    let offset = fs.f.code[pc].sBx;
+    const offset = fs.f.code[pc].sBx;
     if (offset === NO_JUMP)  /* point to itself represents end of list */
         return NO_JUMP;  /* end of list */
     else
@@ -152,8 +152,8 @@ const getjump = function(fs, pc) {
 ** (Jump addresses are relative in Lua)
 */
 const fixjump = function(fs, pc, dest) {
-    let jmp = fs.f.code[pc];
-    let offset = dest - (pc + 1);
+    const jmp = fs.f.code[pc];
+    const offset = dest - (pc + 1);
     lua_assert(dest !== NO_JUMP);
     if (Math.abs(offset) > lopcodes.MAXARG_sBx)
         llex.luaX_syntaxerror(fs.ls, to_luastring("control structure too long", true));
@@ -187,7 +187,7 @@ const luaK_concat = function(fs, l1, l2) {
 ** 'patchlistaux' will fix all them directly to the final destination.
 */
 const luaK_jump = function (fs) {
-    let jpc = fs.jpc;  /* save list of jumps to here */
+    const jpc = fs.jpc;  /* save list of jumps to here */
     fs.jpc = NO_JUMP;  /* no more jumps to here */
     let j = luaK_codeAsBx(fs, OpCodesI.OP_JMP, 0, NO_JUMP);
     j = luaK_concat(fs, j, jpc);  /* keep them on hold */
@@ -246,8 +246,8 @@ const getjumpcontrol = function(fs, pc) {
 ** no register value)
 */
 const patchtestreg = function(fs, node, reg) {
-    let pc = getjumpcontroloffset(fs, node);
-    let i = fs.f.code[pc];
+    const pc = getjumpcontroloffset(fs, node);
+    const i = fs.f.code[pc];
     if (i.opcode !== OpCodesI.OP_TESTSET)
         return false;  /* cannot patch other instructions */
     if (reg !== lopcodes.NO_REG && reg !== i.B)
@@ -275,7 +275,7 @@ const removevalues = function(fs, list) {
 */
 const patchlistaux = function(fs, list, vtarget, reg, dtarget) {
     while (list !== NO_JUMP) {
-        let next = getjump(fs, list);
+        const next = getjump(fs, list);
         if (patchtestreg(fs, list, reg))
             fixjump(fs, list, vtarget);
         else
@@ -325,7 +325,7 @@ const luaK_patchlist = function(fs, list, target) {
 const luaK_patchclose = function(fs, list, level) {
     level++;  /* argument is +1 to reserve 0 as non-op */
     for (; list !== NO_JUMP; list = getjump(fs, list)) {
-        let ins = fs.f.code[list];
+        const ins = fs.f.code[list];
         lua_assert(ins.opcode === OpCodesI.OP_JMP && (ins.A === 0 || ins.A >= level));
         lopcodes.SETARG_A(ins, level);
     }
@@ -336,7 +336,7 @@ const luaK_patchclose = function(fs, list, level) {
 ** line information. Return 'i' position.
 */
 const luaK_code = function(fs, i) {
-    let f = fs.f;
+    const f = fs.f;
     dischargejpc(fs);  /* 'pc' will change */
     /* put new instruction in code array */
     f.code[fs.pc] = i;
@@ -387,7 +387,7 @@ const luaK_codek = function(fs, reg, k) {
     if (k <= lopcodes.MAXARG_Bx)
         return luaK_codeABx(fs, OpCodesI.OP_LOADK, reg, k);
     else {
-        let p = luaK_codeABx(fs, OpCodesI.OP_LOADKX, reg, 0);
+        const p = luaK_codeABx(fs, OpCodesI.OP_LOADKX, reg, 0);
         codeextraarg(fs, k);
         return p;
     }
@@ -398,7 +398,7 @@ const luaK_codek = function(fs, reg, k) {
 ** in field 'maxstacksize'
 */
 const luaK_checkstack = function(fs, n) {
-    let newstack = fs.freereg + n;
+    const newstack = fs.freereg + n;
     if (newstack > fs.f.maxstacksize) {
         if (newstack >= MAXREGS)
             llex.luaX_syntaxerror(fs.ls, to_luastring("expression too complex", true));
@@ -438,8 +438,8 @@ const freeexp = function(fs, e) {
 ** order.
 */
 const freeexps = function(fs, e1, e2) {
-    let r1 = (e1.k === lparser.expkind.VNONRELOC) ? e1.u.info : -1;
-    let r2 = (e2.k === lparser.expkind.VNONRELOC) ? e2.u.info : -1;
+    const r1 = (e1.k === lparser.expkind.VNONRELOC) ? e1.u.info : -1;
+    const r2 = (e2.k === lparser.expkind.VNONRELOC) ? e2.u.info : -1;
     if (r1 > r2) {
         freereg(fs, r1);
         freereg(fs, r2);
@@ -459,16 +459,16 @@ const freeexps = function(fs, e1, e2) {
 ** keys), the caller must provide a useful 'key' for indexing the cache.
 */
 const addk = function(fs, key, v) {
-    let f = fs.f;
-    let idx = ltable.luaH_get(fs.L, fs.ls.h, key);  /* index scanner table */
+    const f = fs.f;
+    const idx = ltable.luaH_get(fs.L, fs.ls.h, key);  /* index scanner table */
     if (idx.ttisinteger()) {  /* is there an index there? */
-        let k = idx.value;
+        const k = idx.value;
         /* correct value? (warning: must distinguish floats from integers!) */
         if (k < fs.nk && f.k[k].ttype() === v.ttype() && f.k[k].value === v.value)
             return k;  /* reuse index */
     }
     /* constant not found; create a new entry */
-    let k = fs.nk;
+    const k = fs.nk;
     ltable.luaH_setfrom(fs.L, fs.ls.h, key, new lobject.TValue(LUA_TNUMINT, k));
     f.k[k] = v;
     fs.nk++;
@@ -479,7 +479,7 @@ const addk = function(fs, key, v) {
 ** Add a string to list of constants and return its index.
 */
 const luaK_stringK = function(fs, s) {
-    let o = new TValue(LUA_TLNGSTR, s);
+    const o = new TValue(LUA_TLNGSTR, s);
     return addk(fs, o, o);  /* use string itself as key */
 };
 
@@ -490,8 +490,8 @@ const luaK_stringK = function(fs, s) {
 ** same value.
 */
 const luaK_intK = function(fs, n) {
-    let k = new TValue(LUA_TLIGHTUSERDATA, n);
-    let o = new TValue(LUA_TNUMINT, n);
+    const k = new TValue(LUA_TLIGHTUSERDATA, n);
+    const o = new TValue(LUA_TNUMINT, n);
     return addk(fs, k, o);
 };
 
@@ -499,7 +499,7 @@ const luaK_intK = function(fs, n) {
 ** Add a float to list of constants and return its index.
 */
 const luaK_numberK = function(fs, r) {
-    let o = new TValue(LUA_TNUMFLT, r);
+    const o = new TValue(LUA_TNUMFLT, r);
     return addk(fs, o, o);  /* use number itself as key */
 };
 
@@ -508,7 +508,7 @@ const luaK_numberK = function(fs, r) {
 ** Add a boolean to list of constants and return its index.
 */
 const boolK = function(fs, b) {
-    let o = new TValue(LUA_TBOOLEAN, b);
+    const o = new TValue(LUA_TBOOLEAN, b);
     return addk(fs, o, o);  /* use boolean itself as key */
 };
 
@@ -517,8 +517,8 @@ const boolK = function(fs, b) {
 ** Add nil to list of constants and return its index.
 */
 const nilK = function(fs) {
-    let v = new TValue(LUA_TNIL, null);
-    let k = new TValue(LUA_TTABLE, fs.ls.h);
+    const v = new TValue(LUA_TNIL, null);
+    const k = new TValue(LUA_TTABLE, fs.ls.h);
     /* cannot use nil as key; instead use table itself to represent nil */
     return addk(fs, k, v);
 };
@@ -529,12 +529,12 @@ const nilK = function(fs) {
 ** or 'nresults' is LUA_MULTRET (as any expression can satisfy that).
 */
 const luaK_setreturns = function(fs, e, nresults) {
-    let ek = lparser.expkind;
+    const ek = lparser.expkind;
     if (e.k === ek.VCALL) {  /* expression is an open function call? */
         lopcodes.SETARG_C(getinstruction(fs, e), nresults + 1);
     }
     else if (e.k === ek.VVARARG) {
-        let pc = getinstruction(fs, e);
+        const pc = getinstruction(fs, e);
         lopcodes.SETARG_B(pc, nresults + 1);
         lopcodes.SETARG_A(pc, fs.freereg);
         luaK_reserveregs(fs, 1);
@@ -557,7 +557,7 @@ const luaK_setmultret = function(fs, e) {
 ** to be fixed.)
 */
 const luaK_setoneret = function(fs, e) {
-    let ek = lparser.expkind;
+    const ek = lparser.expkind;
     if (e.k === ek.VCALL) {  /* expression is an open function call? */
         /* already returns 1 value */
         lua_assert(getinstruction(fs, e).C === 2);
@@ -573,7 +573,7 @@ const luaK_setoneret = function(fs, e) {
 ** Ensure that expression 'e' is not a variable.
 */
 const luaK_dischargevars = function(fs, e) {
-    let ek = lparser.expkind;
+    const ek = lparser.expkind;
 
     switch (e.k) {
         case ek.VLOCAL: {  /* already in a register */
@@ -617,7 +617,7 @@ const code_loadbool = function(fs, A, b, jump) {
 ** 'e' will become a non-relocatable expression).
 */
 const discharge2reg = function(fs, e, reg) {
-    let ek = lparser.expkind;
+    const ek = lparser.expkind;
     luaK_dischargevars(fs, e);
     switch (e.k) {
         case ek.VNIL: {
@@ -641,7 +641,7 @@ const discharge2reg = function(fs, e, reg) {
             break;
         }
         case ek.VRELOCABLE: {
-            let pc = getinstruction(fs, e);
+            const pc = getinstruction(fs, e);
             lopcodes.SETARG_A(pc, reg);  /* instruction will put result in 'reg' */
             break;
         }
@@ -675,7 +675,7 @@ const discharge2anyreg = function(fs, e) {
 */
 const need_value = function(fs, list) {
     for (; list !== NO_JUMP; list = getjump(fs, list)) {
-        let i = getjumpcontrol(fs, list);
+        const i = getjumpcontrol(fs, list);
         if (i.opcode !== OpCodesI.OP_TESTSET) return true;
     }
     return false;  /* not found */
@@ -689,21 +689,20 @@ const need_value = function(fs, list) {
 ** that do not produce values).
 */
 const exp2reg = function(fs, e, reg) {
-    let ek = lparser.expkind;
+    const ek = lparser.expkind;
     discharge2reg(fs, e, reg);
     if (e.k === ek.VJMP)  /* expression itself is a test? */
         e.t = luaK_concat(fs, e.t, e.u.info);  /* put this jump in 't' list */
     if (hasjumps(e)) {
-        let final;  /* position after whole expression */
         let p_f = NO_JUMP;  /* position of an eventual LOAD false */
         let p_t = NO_JUMP;  /* position of an eventual LOAD true */
         if (need_value(fs, e.t) || need_value(fs, e.f)) {
-            let fj = (e.k === ek.VJMP) ? NO_JUMP : luaK_jump(fs);
+            const fj = (e.k === ek.VJMP) ? NO_JUMP : luaK_jump(fs);
             p_f = code_loadbool(fs, reg, 0, 1);
             p_t = code_loadbool(fs, reg, 1, 0);
             luaK_patchtohere(fs, fj);
         }
-        final = luaK_getlabel(fs);
+        const final = luaK_getlabel(fs);  /* position after whole expression */
         patchlistaux(fs, e.f, final, reg, p_f);
         patchlistaux(fs, e.t, final, reg, p_t);
     }
@@ -769,7 +768,7 @@ const luaK_exp2val = function(fs, e) {
 ** Returns R/K index.
 */
 const luaK_exp2RK = function(fs, e) {
-    let ek = lparser.expkind;
+    const ek = lparser.expkind;
     let vk = false;
     luaK_exp2val(fs, e);
     switch (e.k) {  /* move constants to 'k' */
@@ -796,7 +795,7 @@ const luaK_exp2RK = function(fs, e) {
 ** Generate code to store result of expression 'ex' into variable 'var'.
 */
 const luaK_storevar = function(fs, vr, ex) {
-    let ek = lparser.expkind;
+    const ek = lparser.expkind;
     switch (vr.k) {
         case ek.VLOCAL: {
             freeexp(fs, ex);
@@ -804,13 +803,13 @@ const luaK_storevar = function(fs, vr, ex) {
             return;
         }
         case ek.VUPVAL: {
-            let e = luaK_exp2anyreg(fs, ex);
+            const e = luaK_exp2anyreg(fs, ex);
             luaK_codeABC(fs, OpCodesI.OP_SETUPVAL, e, vr.u.info, 0);
             break;
         }
         case ek.VINDEXED: {
-            let op = (vr.u.ind.vt === ek.VLOCAL) ? OpCodesI.OP_SETTABLE : OpCodesI.OP_SETTABUP;
-            let e = luaK_exp2RK(fs, ex);
+            const op = (vr.u.ind.vt === ek.VLOCAL) ? OpCodesI.OP_SETTABLE : OpCodesI.OP_SETTABUP;
+            const e = luaK_exp2RK(fs, ex);
             luaK_codeABC(fs, op, vr.u.ind.t, vr.u.ind.idx, e);
             break;
         }
@@ -824,7 +823,7 @@ const luaK_storevar = function(fs, vr, ex) {
 */
 const luaK_self = function(fs, e, key) {
     luaK_exp2anyreg(fs, e);
-    let ereg = e.u.info;  /* register where 'e' was placed */
+    const ereg = e.u.info;  /* register where 'e' was placed */
     freeexp(fs, e);
     e.u.info = fs.freereg;  /* base register for op_self */
     e.k = lparser.expkind.VNONRELOC;  /* self expression has a fixed register */
@@ -837,7 +836,7 @@ const luaK_self = function(fs, e, key) {
 ** Negate condition 'e' (where 'e' is a comparison).
 */
 const negatecondition = function(fs, e) {
-    let pc = getjumpcontrol(fs, e.u.info);
+    const pc = getjumpcontrol(fs, e.u.info);
     lua_assert(lopcodes.testTMode(pc.opcode) && pc.opcode !== OpCodesI.OP_TESTSET && pc.opcode !== OpCodesI.OP_TEST);
     lopcodes.SETARG_A(pc, !(pc.A));
 };
@@ -850,7 +849,7 @@ const negatecondition = function(fs, e) {
 */
 const jumponcond = function(fs, e, cond) {
     if (e.k === lparser.expkind.VRELOCABLE) {
-        let ie = getinstruction(fs, e);
+        const ie = getinstruction(fs, e);
         if (ie.opcode === OpCodesI.OP_NOT) {
             fs.pc--;  /* remove previous OP_NOT */
             return condjump(fs, OpCodesI.OP_TEST, ie.B, 0, !cond);
@@ -866,7 +865,7 @@ const jumponcond = function(fs, e, cond) {
 ** Emit code to go through if 'e' is true, jump otherwise.
 */
 const luaK_goiftrue = function(fs, e) {
-    let ek = lparser.expkind;
+    const ek = lparser.expkind;
     let pc;  /* pc of new jump */
     luaK_dischargevars(fs, e);
     switch (e.k) {
@@ -893,7 +892,7 @@ const luaK_goiftrue = function(fs, e) {
 ** Emit code to go through if 'e' is false, jump otherwise.
 */
 const luaK_goiffalse = function(fs, e) {
-    let ek = lparser.expkind;
+    const ek = lparser.expkind;
     let pc;  /* pc of new jump */
     luaK_dischargevars(fs, e);
     switch (e.k) {
@@ -919,7 +918,7 @@ const luaK_goiffalse = function(fs, e) {
 ** Code 'not e', doing constant folding.
 */
 const codenot = function(fs, e) {
-    let ek = lparser.expkind;
+    const ek = lparser.expkind;
     luaK_dischargevars(fs, e);
     switch (e.k) {
         case ek.VNIL: case ek.VFALSE: {
@@ -944,7 +943,7 @@ const codenot = function(fs, e) {
         }
     }
     /* interchange true and false lists */
-    { let temp = e.f; e.f = e.t; e.t = temp; }
+    { const temp = e.f; e.f = e.t; e.t = temp; }
     removevalues(fs, e.f);  /* values are useless when negated */
     removevalues(fs, e.t);
 };
@@ -954,7 +953,7 @@ const codenot = function(fs, e) {
 ** register or upvalue.
 */
 const luaK_indexed = function(fs, t, k) {
-    let ek = lparser.expkind;
+    const ek = lparser.expkind;
     lua_assert(!hasjumps(t) && (lparser.vkisinreg(t.k) || t.k === ek.VUPVAL));
     t.u.ind.t = t.u.info;  /* register or upvalue index */
     t.u.ind.idx = luaK_exp2RK(fs, k);  /* R/K index for key */
@@ -984,18 +983,18 @@ const validop = function(op, v1, v2) {
 ** (In this case, 'e1' has the final result.)
 */
 const constfolding = function(op, e1, e2) {
-    let ek = lparser.expkind;
+    const ek = lparser.expkind;
     let v1, v2;
     if (!(v1 = tonumeral(e1, true)) || !(v2 = tonumeral(e2, true)) || !validop(op, v1, v2))
         return 0;  /* non-numeric operands or not safe to fold */
-    let res = new TValue(); /* FIXME */
+    const res = new TValue(); /* FIXME */
     lobject.luaO_arith(null, op, v1, v2, res);  /* does operation */
     if (res.ttisinteger()) {
         e1.k = ek.VKINT;
         e1.u.ival = res.value;
     }
     else {  /* folds neither NaN nor 0.0 (to avoid problems with -0.0) */
-        let n = res.value;
+        const n = res.value;
         if (isNaN(n) || n === 0)
             return false;
         e1.k = ek.VKFLT;
@@ -1010,7 +1009,7 @@ const constfolding = function(op, e1, e2) {
 ** Expression to produce final result will be encoded in 'e'.
 */
 const codeunexpval = function(fs, op, e, line) {
-    let r = luaK_exp2anyreg(fs, e);  /* opcodes operate only on registers */
+    const r = luaK_exp2anyreg(fs, e);  /* opcodes operate only on registers */
     freeexp(fs, e);
     e.u.info = luaK_codeABC(fs, op, 0, r, 0);  /* generate opcode */
     e.k = lparser.expkind.VRELOCABLE;  /* all those operations are relocatable */
@@ -1027,8 +1026,8 @@ const codeunexpval = function(fs, op, e, line) {
 ** recent registers to be released).
 */
 const codebinexpval = function(fs, op, e1, e2, line) {
-    let rk2 = luaK_exp2RK(fs, e2);  /* both operands are "RK" */
-    let rk1 = luaK_exp2RK(fs, e1);
+    const rk2 = luaK_exp2RK(fs, e2);  /* both operands are "RK" */
+    const rk1 = luaK_exp2RK(fs, e1);
     freeexps(fs, e1, e2);
     e1.u.info = luaK_codeABC(fs, op, 0, rk1, rk2);  /* generate opcode */
     e1.k = lparser.expkind.VRELOCABLE;  /* all those operations are relocatable */
@@ -1041,7 +1040,7 @@ const codebinexpval = function(fs, op, e1, e2, line) {
 ** 'e1' was already put in R/K form by 'luaK_infix'.
 */
 const codecomp = function(fs, opr, e1, e2) {
-    let ek = lparser.expkind;
+    const ek = lparser.expkind;
 
     let rk1;
     if (e1.k === ek.VK)
@@ -1051,7 +1050,7 @@ const codecomp = function(fs, opr, e1, e2) {
         rk1 = e1.u.info;
     }
 
-    let rk2 = luaK_exp2RK(fs, e2);
+    const rk2 = luaK_exp2RK(fs, e2);
     freeexps(fs, e1, e2);
     switch (opr) {
         case BinOpr.OPR_NE: {  /* '(a ~= b)' ==> 'not (a === b)' */
@@ -1060,12 +1059,12 @@ const codecomp = function(fs, opr, e1, e2) {
         }
         case BinOpr.OPR_GT: case BinOpr.OPR_GE: {
             /* '(a > b)' ==> '(b < a)';  '(a >= b)' ==> '(b <= a)' */
-            let op = (opr - BinOpr.OPR_NE) + OpCodesI.OP_EQ;
+            const op = (opr - BinOpr.OPR_NE) + OpCodesI.OP_EQ;
             e1.u.info = condjump(fs, op, 1, rk2, rk1);  /* invert operands */
             break;
         }
         default: {  /* '==', '<', '<=' use their own opcodes */
-            let op = (opr - BinOpr.OPR_EQ) + OpCodesI.OP_EQ;
+            const op = (opr - BinOpr.OPR_EQ) + OpCodesI.OP_EQ;
             e1.u.info = condjump(fs, op, 1, rk1, rk2);
             break;
         }
@@ -1077,7 +1076,7 @@ const codecomp = function(fs, opr, e1, e2) {
 ** Apply prefix operation 'op' to expression 'e'.
 */
 const luaK_prefix = function(fs, op, e, line) {
-    let ef = new lparser.expdesc();
+    const ef = new lparser.expdesc();
     ef.k = lparser.expkind.VKINT;
     ef.u.ival = ef.u.nval = ef.u.info = 0;
     ef.t = NO_JUMP;
@@ -1136,7 +1135,7 @@ const luaK_infix = function(fs, op, v) {
 ** one.
 */
 const luaK_posfix = function(fs, op, e1, e2, line) {
-    let ek = lparser.expkind;
+    const ek = lparser.expkind;
     switch (op) {
         case BinOpr.OPR_AND: {
             lua_assert(e1.t === NO_JUMP);  /* list closed by 'luK_infix' */
@@ -1154,7 +1153,7 @@ const luaK_posfix = function(fs, op, e1, e2, line) {
         }
         case BinOpr.OPR_CONCAT: {
             luaK_exp2val(fs, e2);
-            let ins = getinstruction(fs, e2);
+            const ins = getinstruction(fs, e2);
             if (e2.k === ek.VRELOCABLE && ins.opcode === OpCodesI.OP_CONCAT) {
                 lua_assert(e1.u.info === ins.B - 1);
                 freeexp(fs, e1);
@@ -1200,8 +1199,8 @@ const luaK_fixline = function(fs, line) {
 ** table (or LUA_MULTRET to add up to stack top).
 */
 const luaK_setlist = function(fs, base, nelems, tostore) {
-    let c =  (nelems - 1)/lopcodes.LFIELDS_PER_FLUSH + 1;
-    let b = (tostore === LUA_MULTRET) ? 0 : tostore;
+    const c =  (nelems - 1)/lopcodes.LFIELDS_PER_FLUSH + 1;
+    const b = (tostore === LUA_MULTRET) ? 0 : tostore;
     lua_assert(tostore !== 0 && tostore <= lopcodes.LFIELDS_PER_FLUSH);
     if (c <= lopcodes.MAXARG_C)
         luaK_codeABC(fs, OpCodesI.OP_SETLIST, base, b, c);

@@ -1,6 +1,7 @@
 "use strict";
 
 const F = require("../src/fengari.js");
+const ltable = require("../src/vm/ltable.js");
 
 const newOpenState = () => {
     const L = F.lauxlib.luaL_newstate();
@@ -51,6 +52,27 @@ describe("per-state Lua object collector", () => {
         }
     });
 
+    test("zero-sized step stays inactive while stopped but explicit collect still runs", () => {
+        const L = newOpenState();
+        try {
+            run(L,
+                "collectgarbage('stop'); " +
+                "local initial = collectgarbage('count'); " +
+                "for i = 1, 1000 do _ENV.audit_gc_probe = {} end; " +
+                "local beforeStep = collectgarbage('count'); " +
+                "assert(beforeStep > initial * 2); " +
+                "assert(collectgarbage('step', 0) == false); " +
+                "assert(collectgarbage('count') >= beforeStep); " +
+                "local finalized = false; " +
+                "do local object = setmetatable({}, {__gc=function() finalized=true end}) end; " +
+                "collectgarbage('collect'); " +
+                "assert(finalized); " +
+                "collectgarbage('restart')");
+        } finally {
+            F.lua.lua_close(L);
+        }
+    });
+
     test("GC pause and step multiplier are per-state settings", () => {
         const first = newOpenState();
         const second = newOpenState();
@@ -67,6 +89,33 @@ describe("per-state Lua object collector", () => {
         } finally {
             F.lua.lua_close(first);
             F.lua.lua_close(second);
+        }
+    });
+
+    test("managed memory estimate tracks table inserts, deletes, and collection", () => {
+        const L = newOpenState();
+        const initial = ltable.luaH_memory(L);
+        try {
+            F.lua.lua_newtable(L);
+            expect(ltable.luaH_memory(L)).toBe(initial + 64);
+
+            F.lua.lua_pushinteger(L, 42);
+            F.lua.lua_rawseti(L, -2, 1);
+            expect(ltable.luaH_memory(L)).toBe(initial + 128);
+
+            F.lua.lua_pushnil(L);
+            F.lua.lua_rawseti(L, -2, 1);
+            expect(ltable.luaH_memory(L)).toBe(initial + 96);
+
+            F.lua.lua_pushinteger(L, 43);
+            F.lua.lua_rawseti(L, -2, 2);
+            expect(ltable.luaH_memory(L)).toBe(initial + 128);
+
+            F.lua.lua_settop(L, 0);
+            run(L, "collectgarbage('collect')");
+            expect(ltable.luaH_memory(L)).toBe(initial);
+        } finally {
+            F.lua.lua_close(L);
         }
     });
 
@@ -95,6 +144,21 @@ describe("per-state Lua object collector", () => {
 
             run(L, "collectgarbage('collect')");
             expect(finalized.count).toBe(1);
+        } finally {
+            F.lua.lua_close(L);
+        }
+    });
+
+    test("a table resurrected by __gc stays tracked for weak-value cleanup", () => {
+        const L = newOpenState();
+        try {
+            run(L,
+                "local saved; " +
+                "do local mt={__mode='v'}; mt.__gc=function(object) saved=object end; " +
+                "local object=setmetatable({}, mt) end; " +
+                "collectgarbage('collect'); assert(saved ~= nil); " +
+                "do local value={}; saved.child=value end; " +
+                "collectgarbage('collect'); assert(saved.child == nil)");
         } finally {
             F.lua.lua_close(L);
         }

@@ -58,7 +58,7 @@ const adjust_top = function(L, newtop) {
 };
 
 const seterrorobj = function(L, errcode, oldtop) {
-    let current_top = L.top;
+    const current_top = L.top;
 
     /* extend stack so that L.stack[oldtop] is sure to exist */
     while (L.top < oldtop + 1)
@@ -85,18 +85,18 @@ const seterrorobj = function(L, errcode, oldtop) {
 const ERRORSTACKSIZE = LUAI_MAXSTACK + 200;
 
 const luaD_reallocstack = function(L, newsize) {
-    lua_assert(newsize <= LUAI_MAXSTACK || newsize == ERRORSTACKSIZE);
-    lua_assert(L.stack_last == L.stack.length - lstate.EXTRA_STACK);
+    lua_assert(newsize <= LUAI_MAXSTACK || newsize === ERRORSTACKSIZE);
+    lua_assert(L.stack_last === L.stack.length - lstate.EXTRA_STACK);
     L.stack.length = newsize;
     L.stack_last = newsize - lstate.EXTRA_STACK;
 };
 
 const luaD_growstack = function(L, n) {
-    let size = L.stack.length;
+    const size = L.stack.length;
     if (size > LUAI_MAXSTACK)
         luaD_throw(L, LUA_ERRERR);
     else {
-        let needed = L.top + n + lstate.EXTRA_STACK;
+        const needed = L.top + n + lstate.EXTRA_STACK;
         let newsize = 2 * size;
         if (newsize > LUAI_MAXSTACK) newsize = LUAI_MAXSTACK;
         if (newsize < needed) newsize = needed;
@@ -124,7 +124,7 @@ const stackinuse = function(L) {
 };
 
 const luaD_shrinkstack = function(L) {
-    let inuse = stackinuse(L);
+    const inuse = stackinuse(L);
     let goodsize = inuse + Math.floor(inuse / 8) + 2*lstate.EXTRA_STACK;
     if (goodsize > LUAI_MAXSTACK)
         goodsize = LUAI_MAXSTACK;  /* respect stack limit */
@@ -149,15 +149,15 @@ const luaD_inctop = function(L) {
 ** calls.) Returns true iff function has been executed (JS function).
 */
 const luaD_precall = function(L, off, nresults) {
-    let func = L.stack[off];
+    const func = L.stack[off];
 
     switch(func.type) {
         case LUA_TCCL:
         case LUA_TLCF: {
-            let f = func.type === LUA_TCCL ? func.value.f : func.value;
+            const f = func.type === LUA_TCCL ? func.value.f : func.value;
 
             luaD_checkstack(L, LUA_MINSTACK);
-            let ci = lstate.luaE_extendCI(L);
+            const ci = lstate.luaE_extendCI(L);
             ci.funcOff = off;
             ci.nresults = nresults;
             ci.func = func;
@@ -166,7 +166,7 @@ const luaD_precall = function(L, off, nresults) {
             ci.callstatus = 0;
             if (L.hookmask & LUA_MASKCALL)
                 luaD_hook(L, LUA_HOOKCALL, -1);
-            let n = f(L); /* do the actual call */
+            const n = f(L); /* do the actual call */
             if (typeof n !== "number" || n < 0 || (n|0) !== n)
                 throw Error("invalid return value from JS function (expected integer)");
             lapi.api_checknelems(L, n);
@@ -177,9 +177,9 @@ const luaD_precall = function(L, off, nresults) {
         }
         case LUA_TLCL: {
             let base;
-            let p = func.value.p;
+            const p = func.value.p;
             let n = L.top - off - 1;
-            let fsize = p.maxstacksize;
+            const fsize = p.maxstacksize;
             luaD_checkstack(L, fsize);
             if (p.is_vararg) {
                 base = adjust_varargs(L, p, n);
@@ -189,7 +189,7 @@ const luaD_precall = function(L, off, nresults) {
                 base = off + 1;
             }
 
-            let ci = lstate.luaE_extendCI(L);
+            const ci = lstate.luaE_extendCI(L);
             ci.funcOff = off;
             ci.nresults = nresults;
             ci.func = func;
@@ -211,7 +211,7 @@ const luaD_precall = function(L, off, nresults) {
 };
 
 const luaD_poscall = function(L, ci, firstResult, nres) {
-    let wanted = ci.nresults;
+    const wanted = ci.nresults;
 
     if (L.hookmask & (LUA_MASKRET | LUA_MASKLINE)) {
         if (L.hookmask & LUA_MASKRET)
@@ -219,7 +219,7 @@ const luaD_poscall = function(L, ci, firstResult, nres) {
         L.oldpc = ci.previous.l_savedpc;  /* 'oldpc' for caller function */
     }
 
-    let res = ci.funcOff;
+    const res = ci.funcOff;
     L.ci = ci.previous;
     L.ci.next = null;
     return moveresults(L, firstResult, res, nres, wanted);
@@ -263,7 +263,7 @@ const moveresults = function(L, firstResult, res, nres, wanted) {
             break;
         }
     }
-    let newtop = res + wanted; /* top points after the last result */
+    const newtop = res + wanted; /* top points after the last result */
     for (let i=L.top; i>=newtop; i--)
         delete L.stack[i];
     L.top = newtop;
@@ -276,12 +276,12 @@ const moveresults = function(L, firstResult, res, nres, wanted) {
 ** function, can be changed asynchronously by signals.)
 */
 const luaD_hook = function(L, event, line) {
-    let hook = L.hook;
+    const hook = L.hook;
     if (hook && L.allowhook) {  /* make sure there is a hook */
-        let ci = L.ci;
-        let top = L.top;
-        let ci_top = ci.top;
-        let ar = new lua_Debug();
+        const ci = L.ci;
+        const top = L.top;
+        const ci_top = ci.top;
+        const ar = new lua_Debug();
         ar.event = event;
         ar.currentline = line;
         ar.i_ci = ci;
@@ -303,7 +303,7 @@ const callhook = function(L, ci) {
     let hook = LUA_HOOKCALL;
     ci.l_savedpc++;  /* hooks assume 'pc' is already incremented */
     if ((ci.previous.callstatus & lstate.CIST_LUA) &&
-      ci.previous.l_code[ci.previous.l_savedpc - 1].opcode == lopcodes.OpCodesI.OP_TAILCALL) {
+      ci.previous.l_code[ci.previous.l_savedpc - 1].opcode === lopcodes.OpCodesI.OP_TAILCALL) {
         ci.callstatus |= lstate.CIST_TAIL;
         hook = LUA_HOOKTAILCALL;
     }
@@ -312,10 +312,10 @@ const callhook = function(L, ci) {
 };
 
 const adjust_varargs = function(L, p, actual) {
-    let nfixargs = p.numparams;
+    const nfixargs = p.numparams;
     /* move fixed parameters to final position */
-    let fixed = L.top - actual; /* first fixed argument */
-    let base = L.top; /* final position of first argument */
+    const fixed = L.top - actual; /* first fixed argument */
+    const base = L.top; /* final position of first argument */
 
     let i;
     for (i = 0; i < nfixargs && i < actual; i++) {
@@ -330,7 +330,7 @@ const adjust_varargs = function(L, p, actual) {
 };
 
 const tryfuncTM = function(L, off, func) {
-    let tm = ltm.luaT_gettmbyobj(L, func, ltm.TMS.TM_CALL);
+    const tm = ltm.luaT_gettmbyobj(L, func, ltm.TMS.TM_CALL);
     if (!tm.ttisfunction(tm))
         ldebug.luaG_typeerror(L, func, to_luastring("call", true));
     /* Open a hole inside the stack at 'func' */
@@ -373,13 +373,13 @@ const luaD_throw = function(L, errcode) {
         L.errorJmp.status = errcode;  /* set status */
         throw L.errorJmp;
     } else {  /* thread has no error handler */
-        let g = L.l_G;
+        const g = L.l_G;
         L.status = errcode;  /* mark it as dead */
         if (g.mainthread.errorJmp) {  /* main thread has a handler? */
             g.mainthread.stack[g.mainthread.top++] = L.stack[L.top - 1];  /* copy error obj. */
             luaD_throw(g.mainthread, errcode);  /* re-throw in main thread */
         } else {  /* no handler at all; abort */
-            let panic = g.panic;
+            const panic = g.panic;
             if (panic) {  /* panic function? */
                 seterrorobj(L, errcode, L.top);  /* assume EXTRA_STACK */
                 if (L.ci.top < L.top)
@@ -392,8 +392,8 @@ const luaD_throw = function(L, errcode) {
 };
 
 const luaD_rawrunprotected = function(L, f, ud) {
-    let oldnCcalls = L.nCcalls;
-    let lj = {
+    const oldnCcalls = L.nCcalls;
+    const lj = {
         status: LUA_OK,
         previous: L.errorJmp /* chain new error handler */
     };
@@ -405,7 +405,7 @@ const luaD_rawrunprotected = function(L, f, ud) {
         if (lj.status === LUA_OK) {
             /* error was not thrown via luaD_throw, i.e. it is a JS error */
             /* run user error handler (if it exists) */
-            let atnativeerror = L.l_G.atnativeerror;
+            const atnativeerror = L.l_G.atnativeerror;
             if (atnativeerror) {
                 try {
                     lj.status = LUA_OK;
@@ -417,14 +417,14 @@ const luaD_rawrunprotected = function(L, f, ud) {
                     /* Now run the message handler (if it exists) */
                     /* copy of luaG_errormsg without the throw */
                     if (L.errfunc !== 0) {  /* is there an error handling function? */
-                        let errfunc = L.errfunc;
+                        const errfunc = L.errfunc;
                         lobject.pushobj2s(L, L.stack[L.top - 1]); /* move argument */
                         lobject.setobjs2s(L, L.top - 2, errfunc); /* push function */
                         luaD_callnoyield(L, L.top - 2, 1);
                     }
 
                     lj.status = LUA_ERRRUN;
-                } catch (e2) {
+                } catch {
                     if (lj.status === LUA_OK) {
                         /* also failed */
                         lj.status = -1;
@@ -448,7 +448,7 @@ const luaD_rawrunprotected = function(L, f, ud) {
 ** continuation function.
 */
 const finishCcall = function(L, status) {
-    let ci = L.ci;
+    const ci = L.ci;
 
     /* must have a continuation and must be able to call it */
     lua_assert(ci.c_k !== null && L.nny === 0);
@@ -463,8 +463,8 @@ const finishCcall = function(L, status) {
     /* finish 'lua_callk'/'lua_pcall'; CIST_YPCALL and 'errfunc' already
        handled */
     if (ci.nresults === LUA_MULTRET && L.ci.top < L.top) L.ci.top = L.top;
-    let c_k = ci.c_k; /* don't want to call as method */
-    let n = c_k(L, status, ci.c_ctx);  /* call continuation function */
+    const c_k = ci.c_k; /* don't want to call as method */
+    const n = c_k(L, status, ci.c_ctx);  /* call continuation function */
     lapi.api_checknelems(L, n);
     luaD_poscall(L, ci, L.top - n, n);  /* finish 'luaD_precall' */
 };
@@ -510,10 +510,10 @@ const findpcall = function(L) {
 ** 'luaD_pcall'. If there is no recover point, returns zero.
 */
 const recover = function(L, status) {
-    let ci = findpcall(L);
+    const ci = findpcall(L);
     if (ci === null) return 0;  /* no recovery point */
     /* "finish" luaD_pcall */
-    let oldtop = ci.extra;
+    const oldtop = ci.extra;
     lfunc.luaF_close(L, oldtop);
     seterrorobj(L, status, oldtop);
     L.ci = ci;
@@ -530,7 +530,7 @@ const recover = function(L, status) {
 ** coroutine error handler and should not kill the coroutine.)
 */
 const resume_error = function(L, msg, narg) {
-    let ts = luaS_newliteral(L, msg);
+    const ts = luaS_newliteral(L, msg);
     if (narg === 0) {
         lobject.pushsvalue2s(L, ts);
         api_check(L, L.top <= L.ci.top, "stack overflow");
@@ -552,7 +552,7 @@ const resume_error = function(L, msg, narg) {
 */
 const resume = function(L, n) {
     let firstArg = L.top - n;  /* first argument */
-    let ci = L.ci;
+    const ci = L.ci;
     if (L.status === LUA_OK) {  /* starting a coroutine? */
         if (!luaD_precall(L, firstArg - 1, LUA_MULTRET))  /* Lua function? */
             lvm.luaV_execute(L);  /* call it */
@@ -579,7 +579,7 @@ const resume = function(L, n) {
 };
 
 const lua_resume = function(L, from, nargs) {
-    let oldnny = L.nny;  /* save "number of non-yieldable" calls */
+    const oldnny = L.nny;  /* save "number of non-yieldable" calls */
 
     if (L.status === LUA_OK) {  /* may be starting a coroutine */
         if (L.ci !== L.base_ci)  /* not in base level? */
@@ -623,7 +623,7 @@ const lua_isyieldable = function(L) {
 };
 
 const lua_yieldk = function(L, nresults, ctx, k) {
-    let ci = L.ci;
+    const ci = L.ci;
     lapi.api_checknelems(L, nresults);
 
     if (L.nny > 0) {
@@ -655,13 +655,13 @@ const lua_yield = function(L, n) {
 };
 
 const luaD_pcall = function(L, func, u, old_top, ef) {
-    let old_ci = L.ci;
-    let old_allowhooks = L.allowhook;
-    let old_nny = L.nny;
-    let old_errfunc = L.errfunc;
+    const old_ci = L.ci;
+    const old_allowhooks = L.allowhook;
+    const old_nny = L.nny;
+    const old_errfunc = L.errfunc;
     L.errfunc = ef;
 
-    let status = luaD_rawrunprotected(L, func, u);
+    const status = luaD_rawrunprotected(L, func, u);
 
     if (status !== LUA_OK) {
         lfunc.luaF_close(L, old_top);
@@ -709,7 +709,7 @@ const checkmode = function(L, mode, x) {
 
 const f_parser = function(L, p) {
     let cl;
-    let c = p.z.zgetc();  /* read first character */
+    const c = p.z.zgetc();  /* read first character */
     if (c === LUA_SIGNATURE[0]) {
         checkmode(L, p.mode, to_luastring("binary", true));
         cl = lundump.luaU_undump(L, p.z, p.name);
@@ -723,9 +723,9 @@ const f_parser = function(L, p) {
 };
 
 const luaD_protectedparser = function(L, z, name, mode) {
-    let p = new SParser(z, name, mode);
+    const p = new SParser(z, name, mode);
     L.nny++;  /* cannot yield during parsing */
-    let status = luaD_pcall(L, f_parser, p, L.top, L.errfunc);
+    const status = luaD_pcall(L, f_parser, p, L.top, L.errfunc);
     L.nny--;
     return status;
 };

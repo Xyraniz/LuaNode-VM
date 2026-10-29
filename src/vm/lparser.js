@@ -263,12 +263,12 @@ const error_expected = function(ls, token) {
 };
 
 const errorlimit = function(fs, limit, what) {
-    let L = fs.ls.L;
-    let line = fs.f.linedefined;
-    let where = (line === 0)
+    const L = fs.ls.L;
+    const line = fs.f.linedefined;
+    const where = (line === 0)
         ? to_luastring("main function", true)
         : lobject.luaO_pushfstring(L, to_luastring("function at line %d", true), line);
-    let msg = lobject.luaO_pushfstring(L, to_luastring("too many %s (limit is %d) in %s", true),
+    const msg = lobject.luaO_pushfstring(L, to_luastring("too many %s (limit is %d) in %s", true),
         what, limit, where);
     llex.luaX_syntaxerror(fs.ls, msg);
 };
@@ -314,7 +314,7 @@ const check_match = function(ls, what, who, where) {
 
 const str_checkname = function(ls) {
     check(ls, R.TK_NAME);
-    let ts = ls.t.seminfo.ts;
+    const ts = ls.t.seminfo.ts;
     llex.luaX_next(ls);
     return ts;
 };
@@ -334,17 +334,17 @@ const checkname = function(ls, e) {
 };
 
 const registerlocalvar = function(ls, varname) {
-    let fs = ls.fs;
-    let f = fs.f;
+    const fs = ls.fs;
+    const f = fs.f;
     f.locvars[fs.nlocvars] = new lobject.LocVar();
     f.locvars[fs.nlocvars].varname = varname;
     return fs.nlocvars++;
 };
 
 const new_localvar = function(ls, name) {
-    let fs = ls.fs;
-    let dyd = ls.dyd;
-    let reg = registerlocalvar(ls, name);
+    const fs = ls.fs;
+    const dyd = ls.dyd;
+    const reg = registerlocalvar(ls, name);
     checklimit(fs, dyd.actvar.n + 1 - fs.firstlocal, MAXVARS, to_luastring("local variables", true));
     dyd.actvar.arr[dyd.actvar.n] = new Vardesc();
     dyd.actvar.arr[dyd.actvar.n].idx = reg;
@@ -356,13 +356,13 @@ const new_localvarliteral = function(ls, name) {
 };
 
 const getlocvar = function(fs, i) {
-    let idx = fs.ls.dyd.actvar.arr[fs.firstlocal + i].idx;
+    const idx = fs.ls.dyd.actvar.arr[fs.firstlocal + i].idx;
     lua_assert(idx < fs.nlocvars);
     return fs.f.locvars[idx];
 };
 
 const adjustlocalvars = function(ls, nvars) {
-    let fs = ls.fs;
+    const fs = ls.fs;
     fs.nactvar = fs.nactvar + nvars;
     for (; nvars; nvars--)
         getlocvar(fs, fs.nactvar - nvars).startpc = fs.pc;
@@ -375,7 +375,7 @@ const removevars = function(fs, tolevel) {
 };
 
 const searchupvalue = function(fs, name) {
-    let up = fs.f.upvalues;
+    const up = fs.f.upvalues;
     for (let i = 0; i < fs.nups; i++) {
         if (eqstr(up[i].name, name))
             return i;
@@ -384,7 +384,7 @@ const searchupvalue = function(fs, name) {
 };
 
 const newupvalue = function(fs, name, v) {
-    let f = fs.f;
+    const f = fs.f;
     checklimit(fs, fs.nups + 1, lfunc.MAXUPVAL, to_luastring("upvalues", true));
     f.upvalues[fs.nups] = {
         instack: v.k === expkind.VLOCAL,
@@ -422,7 +422,7 @@ const singlevaraux = function(fs, n, vr, base) {
     if (fs === null)  /* no more levels? */
         init_exp(vr, expkind.VVOID, 0);  /* default is global */
     else {
-        let v = searchvar(fs, n);  /* look up locals at current level */
+        const v = searchvar(fs, n);  /* look up locals at current level */
         if (v >= 0) {  /* found? */
             init_exp(vr, expkind.VLOCAL, v);  /* variable is local */
             if (!base)
@@ -442,11 +442,11 @@ const singlevaraux = function(fs, n, vr, base) {
 };
 
 const singlevar = function(ls, vr) {
-    let varname = str_checkname(ls);
-    let fs = ls.fs;
+    const varname = str_checkname(ls);
+    const fs = ls.fs;
     singlevaraux(fs, varname, vr, 1);
     if (vr.k === expkind.VVOID) {  /* is global name? */
-        let key = new expdesc();
+        const key = new expdesc();
         singlevaraux(fs, ls.envn, vr, 1);  /* get environment variable */
         lua_assert(vr.k !== expkind.VVOID);  /* this one must exist */
         codestring(ls, key, varname);  /* key is variable name */
@@ -455,7 +455,7 @@ const singlevar = function(ls, vr) {
 };
 
 const adjust_assign = function(ls, nvars, nexps, e) {
-    let fs = ls.fs;
+    const fs = ls.fs;
     let extra = nvars - nexps;
     if (hasmultret(e.k)) {
         extra++;  /* includes call itself */
@@ -465,7 +465,7 @@ const adjust_assign = function(ls, nvars, nexps, e) {
     } else {
         if (e.k !== expkind.VVOID) luaK_exp2nextreg(fs, e);  /* close last expression */
         if (extra > 0) {
-            let reg = fs.freereg;
+            const reg = fs.freereg;
             luaK_reserveregs(fs, extra);
             luaK_nil(fs, reg, extra);
         }
@@ -475,7 +475,7 @@ const adjust_assign = function(ls, nvars, nexps, e) {
 };
 
 const enterlevel = function(ls) {
-    let L = ls.L;
+    const L = ls.L;
     ++L.nCcalls;
     checklimit(ls.fs, L.nCcalls, LUAI_MAXCCALLS, to_luastring("C levels", true));
 };
@@ -485,13 +485,13 @@ const leavelevel = function(ls) {
 };
 
 const closegoto = function(ls, g, label) {
-    let fs = ls.fs;
-    let gl = ls.dyd.gt;
-    let gt = gl.arr[g];
+    const fs = ls.fs;
+    const gl = ls.dyd.gt;
+    const gt = gl.arr[g];
     lua_assert(eqstr(gt.name, label.name));
     if (gt.nactvar < label.nactvar) {
-        let vname = getlocvar(fs, gt.nactvar).varname;
-        let msg = lobject.luaO_pushfstring(ls.L,
+        const vname = getlocvar(fs, gt.nactvar).varname;
+        const msg = lobject.luaO_pushfstring(ls.L,
             to_luastring("<goto %s> at line %d jumps into the scope of local '%s'"),
             gt.name.getstr(), gt.line, vname.getstr());
         semerror(ls, msg);
@@ -507,12 +507,12 @@ const closegoto = function(ls, g, label) {
 ** try to close a goto with existing labels; this solves backward jumps
 */
 const findlabel = function(ls, g) {
-    let bl = ls.fs.bl;
-    let dyd = ls.dyd;
-    let gt = dyd.gt.arr[g];
+    const bl = ls.fs.bl;
+    const dyd = ls.dyd;
+    const gt = dyd.gt.arr[g];
     /* check labels in current block for a match */
     for (let i = bl.firstlabel; i < dyd.label.n; i++) {
-        let lb = dyd.label.arr[i];
+        const lb = dyd.label.arr[i];
         if (eqstr(lb.name, gt.name)) {  /* correct label? */
             if (gt.nactvar > lb.nactvar && (bl.upval || dyd.label.n > bl.firstlabel))
                 luaK_patchclose(ls.fs, gt.pc, lb.nactvar);
@@ -524,7 +524,7 @@ const findlabel = function(ls, g) {
 };
 
 const newlabelentry = function(ls, l, name, line, pc) {
-    let n = l.n;
+    const n = l.n;
     l.arr[n] = new Labeldesc();
     l.arr[n].name = name;
     l.arr[n].line = line;
@@ -539,7 +539,7 @@ const newlabelentry = function(ls, l, name, line, pc) {
 ** block; solves forward jumps
 */
 const findgotos = function(ls, lb) {
-    let gl = ls.dyd.gt;
+    const gl = ls.dyd.gt;
     let i = ls.fs.bl.firstgoto;
     while (i < gl.n) {
         if (eqstr(gl.arr[i].name, lb.name))
@@ -557,11 +557,11 @@ const findgotos = function(ls, lb) {
 */
 const movegotosout = function(fs, bl) {
     let i = bl.firstgoto;
-    let gl = fs.ls.dyd.gt;
+    const gl = fs.ls.dyd.gt;
     /* correct pending gotos to current block and try to close it
        with visible labels */
     while (i < gl.n) {
-        let gt = gl.arr[i];
+        const gt = gl.arr[i];
         if (gt.nactvar > bl.nactvar) {
             if (bl.upval)
                 luaK_patchclose(fs, gt.pc, bl.nactvar);
@@ -587,8 +587,8 @@ const enterblock = function(fs, bl, isloop) {
 ** create a label named 'break' to resolve break statements
 */
 const breaklabel = function(ls) {
-    let n = luaS_newliteral(ls.L, "break");
-    let l = newlabelentry(ls, ls.dyd.label, n, 0, ls.fs.pc);
+    const n = luaS_newliteral(ls.L, "break");
+    const l = newlabelentry(ls, ls.dyd.label, n, 0, ls.fs.pc);
     findgotos(ls, ls.dyd.label.arr[l]);
 };
 
@@ -608,10 +608,10 @@ const undefgoto = function(ls, gt) {
 ** adds a new prototype into list of prototypes
 */
 const addprototype = function(ls) {
-    let L = ls.L;
-    let clp = new Proto(L);
-    let fs = ls.fs;
-    let f = fs.f;  /* prototype of current function */
+    const L = ls.L;
+    const clp = new Proto(L);
+    const fs = ls.fs;
+    const f = fs.f;  /* prototype of current function */
     f.p[fs.np++] = clp;
     return clp;
 };
@@ -620,7 +620,7 @@ const addprototype = function(ls) {
 ** codes instruction to create new closure in parent function.
 */
 const codeclosure = function(ls, v) {
-    let fs = ls.fs.prev;
+    const fs = ls.fs.prev;
     init_exp(v, expkind.VRELOCABLE, luaK_codeABx(fs, OP_CLOSURE, 0, fs.np -1));
     luaK_exp2nextreg(fs, v);  /* fix it at the last register */
 };
@@ -640,18 +640,18 @@ const open_func = function(ls, fs, bl) {
     fs.nactvar = 0;
     fs.firstlocal = ls.dyd.actvar.n;
     fs.bl = null;
-    let f = fs.f;
+    const f = fs.f;
     f.source = ls.source;
     f.maxstacksize = 2;  /* registers 0/1 are always valid */
     enterblock(fs, bl, false);
 };
 
 const leaveblock = function(fs) {
-    let bl = fs.bl;
-    let ls = fs.ls;
+    const bl = fs.bl;
+    const ls = fs.ls;
     if (bl.previous && bl.upval) {
         /* create a 'jump to here' to close upvalues */
-        let j = luaK_jump(fs);
+        const j = luaK_jump(fs);
         luaK_patchclose(fs, j , bl.nactvar);
         luaK_patchtohere(fs, j);
     }
@@ -671,7 +671,7 @@ const leaveblock = function(fs) {
 };
 
 const close_func = function(ls) {
-    let fs = ls.fs;
+    const fs = ls.fs;
     luaK_ret(fs, 0, 0);  /* final return */
     leaveblock(fs);
     lua_assert(fs.bl === null);
@@ -705,8 +705,8 @@ const statlist = function(ls) {
 
 const fieldsel = function(ls, v) {
     /* fieldsel -> ['.' | ':'] NAME */
-    let fs = ls.fs;
-    let key = new expdesc();
+    const fs = ls.fs;
+    const key = new expdesc();
     luaK_exp2anyregup(fs, v);
     llex.luaX_next(ls);  /* skip the dot or colon */
     checkname(ls, key);
@@ -739,10 +739,10 @@ class ConsControl {
 
 const recfield = function(ls, cc) {
     /* recfield -> (NAME | '['exp1']') = exp1 */
-    let fs = ls.fs;
-    let reg = ls.fs.freereg;
-    let key = new expdesc();
-    let val = new expdesc();
+    const fs = ls.fs;
+    const reg = ls.fs.freereg;
+    const key = new expdesc();
+    const val = new expdesc();
 
     if (ls.t.token === R.TK_NAME) {
         checklimit(fs, cc.nh, MAX_INT, to_luastring("items in a constructor", true));
@@ -751,7 +751,7 @@ const recfield = function(ls, cc) {
         yindex(ls, key);
     cc.nh++;
     checknext(ls, 61 /* ('=').charCodeAt(0) */);
-    let rkkey = luaK_exp2RK(fs, key);
+    const rkkey = luaK_exp2RK(fs, key);
     expr(ls, val);
     luaK_codeABC(fs, OP_SETTABLE, cc.t.u.info, rkkey, luaK_exp2RK(fs, val));
     fs.freereg = reg;  /* free registers */
@@ -812,10 +812,10 @@ const field = function(ls, cc) {
 const constructor = function(ls, t) {
     /* constructor -> '{' [ field { sep field } [sep] ] '}'
        sep -> ',' | ';' */
-    let fs = ls.fs;
-    let line = ls.linenumber;
-    let pc = luaK_codeABC(fs, OP_NEWTABLE, 0, 0, 0);
-    let cc = new ConsControl();
+    const fs = ls.fs;
+    const line = ls.linenumber;
+    const pc = luaK_codeABC(fs, OP_NEWTABLE, 0, 0, 0);
+    const cc = new ConsControl();
     cc.na = cc.nh = cc.tostore = 0;
     cc.t = t;
     init_exp(t, expkind.VRELOCABLE, pc);
@@ -838,8 +838,8 @@ const constructor = function(ls, t) {
 
 const parlist = function(ls) {
     /* parlist -> [ param { ',' param } ] */
-    let fs = ls.fs;
-    let f = fs.f;
+    const fs = ls.fs;
+    const f = fs.f;
     let nparams = 0;
     f.is_vararg = false;
     if (ls.t.token !== 41 /* (')').charCodeAt(0) */) {  /* is 'parlist' not empty? */
@@ -866,8 +866,8 @@ const parlist = function(ls) {
 
 const body = function(ls, e, ismethod, line) {
     /* body ->  '(' parlist ')' block END */
-    let new_fs = new FuncState();
-    let bl = new BlockCnt();
+    const new_fs = new FuncState();
+    const bl = new BlockCnt();
     new_fs.f = addprototype(ls);
     new_fs.f.linedefined = line;
     open_func(ls, new_fs, bl);
@@ -898,8 +898,8 @@ const explist = function(ls, v) {
 };
 
 const funcargs = function(ls, f, line) {
-    let fs = ls.fs;
-    let args = new expdesc();
+    const fs = ls.fs;
+    const args = new expdesc();
     switch (ls.t.token) {
         case 40 /* ('(').charCodeAt(0) */: {  /* funcargs -> '(' [ explist ] ')' */
             llex.luaX_next(ls);
@@ -927,7 +927,7 @@ const funcargs = function(ls, f, line) {
     }
     lua_assert(f.k === expkind.VNONRELOC);
     let nparams;
-    let base = f.u.info;  /* base register for call */
+    const base = f.u.info;  /* base register for call */
     if (hasmultret(args.k))
         nparams = LUA_MULTRET;  /* open call */
     else {
@@ -950,7 +950,7 @@ const primaryexp = function(ls, v) {
     /* primaryexp -> NAME | '(' expr ')' */
     switch (ls.t.token) {
         case 40 /* ('(').charCodeAt(0) */: {
-            let line = ls.linenumber;
+            const line = ls.linenumber;
             llex.luaX_next(ls);
             expr(ls, v);
             check_match(ls, 41 /* (')').charCodeAt(0) */, 40 /* ('(').charCodeAt(0) */, line);
@@ -970,8 +970,8 @@ const primaryexp = function(ls, v) {
 const suffixedexp = function(ls, v) {
     /* suffixedexp ->
        primaryexp { '.' NAME | '[' exp ']' | ':' NAME funcargs | funcargs } */
-    let fs = ls.fs;
-    let line = ls.linenumber;
+    const fs = ls.fs;
+    const line = ls.linenumber;
     primaryexp(ls, v);
     for (;;) {
         switch (ls.t.token) {
@@ -980,14 +980,14 @@ const suffixedexp = function(ls, v) {
                 break;
             }
             case 91 /* ('[').charCodeAt(0) */: {  /* '[' exp1 ']' */
-                let key = new expdesc();
+                const key = new expdesc();
                 luaK_exp2anyregup(fs, v);
                 yindex(ls, key);
                 luaK_indexed(fs, v, key);
                 break;
             }
             case 58 /* (':').charCodeAt(0) */: {  /* ':' NAME funcargs */
-                let key = new expdesc();
+                const key = new expdesc();
                 llex.luaX_next(ls);
                 checkname(ls, key);
                 luaK_self(fs, v, key);
@@ -1035,7 +1035,7 @@ const simpleexp = function(ls, v) {
             break;
         }
         case R.TK_DOTS: {  /* vararg */
-            let fs = ls.fs;
+            const fs = ls.fs;
             check_condition(ls, fs.f.is_vararg, to_luastring("cannot use '...' outside a vararg function", true));
             init_exp(v, expkind.VVARARG, luaK_codeABC(fs, OP_VARARG, 0, 1, 0));
             break;
@@ -1115,9 +1115,9 @@ const UNARY_PRIORITY = 12;
 */
 const subexpr = function(ls, v, limit) {
     enterlevel(ls);
-    let uop = getunopr(ls.t.token);
+    const uop = getunopr(ls.t.token);
     if (uop !== OPR_NOUNOPR) {
-        let line = ls.linenumber;
+        const line = ls.linenumber;
         llex.luaX_next(ls);
         subexpr(ls, v, UNARY_PRIORITY);
         luaK_prefix(ls.fs, uop, v, line);
@@ -1126,12 +1126,12 @@ const subexpr = function(ls, v, limit) {
     /* expand while operators have priorities higher than 'limit' */
     let op = getbinopr(ls.t.token);
     while (op !== OPR_NOBINOPR && priority[op].left > limit) {
-        let v2 = new expdesc();
-        let line = ls.linenumber;
+        const v2 = new expdesc();
+        const line = ls.linenumber;
         llex.luaX_next(ls);
         luaK_infix(ls.fs, op, v);
         /* read sub-expression with higher priority */
-        let nextop = subexpr(ls, v2, priority[op].right);
+        const nextop = subexpr(ls, v2, priority[op].right);
         luaK_posfix(ls.fs, op, v, v2, line);
         op = nextop;
     }
@@ -1155,8 +1155,8 @@ const expr = function(ls, v) {
 
 const block = function(ls) {
     /* block -> statlist */
-    let fs = ls.fs;
-    let bl = new BlockCnt();
+    const fs = ls.fs;
+    const bl = new BlockCnt();
     enterblock(fs, bl, 0);
     statlist(ls);
     leaveblock(fs);
@@ -1180,8 +1180,8 @@ class LHS_assign {
 ** use this safe copy in the previous assignment.
 */
 const check_conflict = function(ls, lh, v) {
-    let fs = ls.fs;
-    let extra = fs.freereg;  /* eventual position to save local variable */
+    const fs = ls.fs;
+    const extra = fs.freereg;  /* eventual position to save local variable */
     let conflict = false;
     for (; lh; lh = lh.prev) {  /* check all previous assignments */
         if (lh.v.k === expkind.VINDEXED) {  /* assigning to a table? */
@@ -1200,17 +1200,17 @@ const check_conflict = function(ls, lh, v) {
     }
     if (conflict) {
         /* copy upvalue/local value to a temporary (in position 'extra') */
-        let op = v.k === expkind.VLOCAL ? OP_MOVE : OP_GETUPVAL;
+        const op = v.k === expkind.VLOCAL ? OP_MOVE : OP_GETUPVAL;
         luaK_codeABC(fs, op, extra, v.u.info, 0);
         luaK_reserveregs(fs, 1);
     }
 };
 
 const assignment = function(ls, lh, nvars) {
-    let e = new expdesc();
+    const e = new expdesc();
     check_condition(ls, vkisvar(lh.v.k), to_luastring("syntax error", true));
     if (testnext(ls, 44 /* (',').charCodeAt(0) */)) {  /* assignment -> ',' suffixedexp assignment */
-        let nv = new LHS_assign();
+        const nv = new LHS_assign();
         nv.prev = lh;
         suffixedexp(ls, nv.v);
         if (nv.v.k !== expkind.VINDEXED)
@@ -1219,7 +1219,7 @@ const assignment = function(ls, lh, nvars) {
         assignment(ls, nv, nvars + 1);
     } else {  /* assignment -> '=' explist */
         checknext(ls, 61 /* ('=').charCodeAt(0) */);
-        let nexps = explist(ls, e);
+        const nexps = explist(ls, e);
         if (nexps !== nvars)
             adjust_assign(ls, nvars, nexps, e);
         else {
@@ -1234,7 +1234,7 @@ const assignment = function(ls, lh, nvars) {
 
 const cond = function(ls) {
     /* cond -> exp */
-    let v = new expdesc();
+    const v = new expdesc();
     expr(ls, v);  /* read condition */
     if (v.k === expkind.VNIL) v.k = expkind.VFALSE;  /* 'falses' are all equal here */
     luaK_goiftrue(ls.fs, v);
@@ -1242,7 +1242,7 @@ const cond = function(ls) {
 };
 
 const gotostat = function(ls, pc) {
-    let line = ls.linenumber;
+    const line = ls.linenumber;
     let label;
     if (testnext(ls, R.TK_GOTO))
         label = str_checkname(ls);
@@ -1250,7 +1250,7 @@ const gotostat = function(ls, pc) {
         llex.luaX_next(ls);  /* skip break */
         label = luaS_newliteral(ls.L, "break");
     }
-    let g = newlabelentry(ls, ls.dyd.gt, label, line, pc);
+    const g = newlabelentry(ls, ls.dyd.gt, label, line, pc);
     findlabel(ls, g);  /* close it if label already defined */
 };
 
@@ -1258,7 +1258,7 @@ const gotostat = function(ls, pc) {
 const checkrepeated = function(fs, ll, label) {
     for (let i = fs.bl.firstlabel; i < ll.n; i++) {
         if (eqstr(label, ll.arr[i].name)) {
-            let msg = lobject.luaO_pushfstring(fs.ls.L,
+            const msg = lobject.luaO_pushfstring(fs.ls.L,
                 to_luastring("label '%s' already defined on line %d", true),
                 label.getstr(), ll.arr[i].line);
             semerror(fs.ls, msg);
@@ -1274,13 +1274,12 @@ const skipnoopstat = function(ls) {
 
 const labelstat = function(ls, label, line) {
     /* label -> '::' NAME '::' */
-    let fs = ls.fs;
-    let ll = ls.dyd.label;
-    let l;  /* index of new label being created */
+    const fs = ls.fs;
+    const ll = ls.dyd.label;
     checkrepeated(fs, ll, label);  /* check for repeated labels */
     checknext(ls, R.TK_DBCOLON);  /* skip double colon */
     /* create new entry for this label */
-    l = newlabelentry(ls, ll, label, line, luaK_getlabel(fs));
+    const l = newlabelentry(ls, ll, label, line, luaK_getlabel(fs));  /* index of new label being created */
     skipnoopstat(ls);  /* skip other no-op statements */
     if (block_follow(ls, 0)) {  /* label is last no-op statement in the block? */
         /* assume that locals are already out of scope */
@@ -1291,11 +1290,11 @@ const labelstat = function(ls, label, line) {
 
 const whilestat = function(ls, line) {
     /* whilestat -> WHILE cond DO block END */
-    let fs = ls.fs;
-    let bl = new BlockCnt();
+    const fs = ls.fs;
+    const bl = new BlockCnt();
     llex.luaX_next(ls);  /* skip WHILE */
-    let whileinit = luaK_getlabel(fs);
-    let condexit = cond(ls);
+    const whileinit = luaK_getlabel(fs);
+    const condexit = cond(ls);
     enterblock(fs, bl, 1);
     checknext(ls, R.TK_DO);
     block(ls);
@@ -1307,16 +1306,16 @@ const whilestat = function(ls, line) {
 
 const repeatstat = function(ls, line) {
     /* repeatstat -> REPEAT block UNTIL cond */
-    let fs = ls.fs;
-    let repeat_init = luaK_getlabel(fs);
-    let bl1 = new BlockCnt();
-    let bl2 = new BlockCnt();
+    const fs = ls.fs;
+    const repeat_init = luaK_getlabel(fs);
+    const bl1 = new BlockCnt();
+    const bl2 = new BlockCnt();
     enterblock(fs, bl1, 1);  /* loop block */
     enterblock(fs, bl2, 0);  /* scope block */
     llex.luaX_next(ls);  /* skip REPEAT */
     statlist(ls);
     check_match(ls, R.TK_UNTIL, R.TK_REPEAT, line);
-    let condexit = cond(ls);  /* read condition (inside scope block) */
+    const condexit = cond(ls);  /* read condition (inside scope block) */
     if (bl2.upval)  /* upvalues? */
         luaK_patchclose(fs, condexit, bl2.nactvar);
     leaveblock(fs);  /* finish scope */
@@ -1325,22 +1324,22 @@ const repeatstat = function(ls, line) {
 };
 
 const exp1 = function(ls) {
-    let e = new expdesc();
+    const e = new expdesc();
     expr(ls, e);
     luaK_exp2nextreg(ls.fs, e);
     lua_assert(e.k === expkind.VNONRELOC);
-    let reg = e.u.info;
+    const reg = e.u.info;
     return reg;
 };
 
 const forbody = function(ls, base, line, nvars, isnum) {
     /* forbody -> DO block */
-    let bl = new BlockCnt();
-    let fs = ls.fs;
+    const bl = new BlockCnt();
+    const fs = ls.fs;
     let endfor;
     adjustlocalvars(ls, 3);  /* control variables */
     checknext(ls, R.TK_DO);
-    let prep = isnum ? luaK_codeAsBx(fs, OP_FORPREP, base, NO_JUMP) : luaK_jump(fs);
+    const prep = isnum ? luaK_codeAsBx(fs, OP_FORPREP, base, NO_JUMP) : luaK_jump(fs);
     enterblock(fs, bl, 0);  /* scope for declared variables */
     adjustlocalvars(ls, nvars);
     luaK_reserveregs(fs, nvars);
@@ -1360,8 +1359,8 @@ const forbody = function(ls, base, line, nvars, isnum) {
 
 const fornum = function(ls, varname, line) {
     /* fornum -> NAME = exp1,exp1[,exp1] forbody */
-    let fs = ls.fs;
-    let base = fs.freereg;
+    const fs = ls.fs;
+    const base = fs.freereg;
     new_localvarliteral(ls, "(for index)");
     new_localvarliteral(ls, "(for limit)");
     new_localvarliteral(ls, "(for step)");
@@ -1381,10 +1380,10 @@ const fornum = function(ls, varname, line) {
 
 const forlist = function(ls, indexname) {
     /* forlist -> NAME {,NAME} IN explist forbody */
-    let fs = ls.fs;
-    let e = new expdesc();
+    const fs = ls.fs;
+    const e = new expdesc();
     let nvars = 4;  /* gen, state, control, plus at least one declared var */
-    let base = fs.freereg;
+    const base = fs.freereg;
     /* create control variables */
     new_localvarliteral(ls, "(for generator)");
     new_localvarliteral(ls, "(for state)");
@@ -1396,7 +1395,7 @@ const forlist = function(ls, indexname) {
         nvars++;
     }
     checknext(ls, R.TK_IN);
-    let line = ls.linenumber;
+    const line = ls.linenumber;
     adjust_assign(ls, 3, explist(ls, e), e);
     luaK_checkstack(fs, 3);  /* extra space to call generator */
     forbody(ls, base, line, nvars - 3, 0);
@@ -1404,11 +1403,11 @@ const forlist = function(ls, indexname) {
 
 const forstat = function(ls, line) {
     /* forstat -> FOR (fornum | forlist) END */
-    let fs = ls.fs;
-    let bl = new BlockCnt();
+    const fs = ls.fs;
+    const bl = new BlockCnt();
     enterblock(fs, bl, 1);  /* scope for loop and control variables */
     llex.luaX_next(ls);  /* skip 'for' */
-    let varname = str_checkname(ls);  /* first variable name */
+    const varname = str_checkname(ls);  /* first variable name */
     switch (ls.t.token) {
         case 61 /* ('=').charCodeAt(0) */: fornum(ls, varname, line); break;
         case 44 /* (',').charCodeAt(0) */: case R.TK_IN: forlist(ls, varname); break;
@@ -1420,9 +1419,9 @@ const forstat = function(ls, line) {
 
 const test_then_block = function(ls, escapelist) {
     /* test_then_block -> [IF | ELSEIF] cond THEN block */
-    let bl = new BlockCnt();
-    let fs = ls.fs;
-    let v = new expdesc();
+    const bl = new BlockCnt();
+    const fs = ls.fs;
+    const v = new expdesc();
     let jf;  /* instruction to skip 'then' code (if condition is false) */
 
     llex.luaX_next(ls);  /* skip IF or ELSEIF */
@@ -1456,7 +1455,7 @@ const test_then_block = function(ls, escapelist) {
 
 const ifstat = function(ls, line) {
     /* ifstat -> IF cond THEN block {ELSEIF cond THEN block} [ELSE block] END */
-    let fs = ls.fs;
+    const fs = ls.fs;
     let escapelist = NO_JUMP;  /* exit list for finished parts */
     escapelist = test_then_block(ls, escapelist);  /* IF cond THEN block */
     while (ls.t.token === R.TK_ELSEIF)
@@ -1468,8 +1467,8 @@ const ifstat = function(ls, line) {
 };
 
 const localfunc = function(ls) {
-    let b = new expdesc();
-    let fs = ls.fs;
+    const b = new expdesc();
+    const fs = ls.fs;
     new_localvar(ls, str_checkname(ls));  /* new local variable */
     adjustlocalvars(ls, 1);  /* enter its scope */
     body(ls, b, 0, ls.linenumber);  /* function created in next register */
@@ -1481,7 +1480,7 @@ const localstat = function(ls) {
     /* stat -> LOCAL NAME {',' NAME} ['=' explist] */
     let nvars = 0;
     let nexps;
-    let e = new expdesc();
+    const e = new expdesc();
     do {
         new_localvar(ls, str_checkname(ls));
         nvars++;
@@ -1511,10 +1510,10 @@ const funcname = function(ls, v) {
 
 const funcstat = function(ls, line) {
     /* funcstat -> FUNCTION funcname body */
-    let v = new expdesc();
-    let b = new expdesc();
+    const v = new expdesc();
+    const b = new expdesc();
     llex.luaX_next(ls);  /* skip FUNCTION */
-    let ismethod = funcname(ls, v);
+    const ismethod = funcname(ls, v);
     body(ls, b, ismethod, line);
     luaK_storevar(ls.fs, v, b);
     luaK_fixline(ls.fs, line);  /* definition "happens" in the first line */
@@ -1522,8 +1521,8 @@ const funcstat = function(ls, line) {
 
 const exprstat= function(ls) {
     /* stat -> func | assignment */
-    let fs = ls.fs;
-    let v = new LHS_assign();
+    const fs = ls.fs;
+    const v = new LHS_assign();
     suffixedexp(ls, v.v);
     if (ls.t.token === 61 /* ('=').charCodeAt(0) */ || ls.t.token === 44 /* (',').charCodeAt(0) */) { /* stat . assignment ? */
         v.prev = null;
@@ -1537,8 +1536,8 @@ const exprstat= function(ls) {
 
 const retstat = function(ls) {
     /* stat -> RETURN [explist] [';'] */
-    let fs = ls.fs;
-    let e = new expdesc();
+    const fs = ls.fs;
+    const e = new expdesc();
     let first, nret;  /* registers with returned values */
     if (block_follow(ls, 1) || ls.t.token === 59 /* (';').charCodeAt(0) */)
         first = nret = 0;  /* return no values */
@@ -1567,7 +1566,7 @@ const retstat = function(ls) {
 };
 
 const statement = function(ls) {
-    let line = ls.linenumber;  /* may be needed for error messages */
+    const line = ls.linenumber;  /* may be needed for error messages */
     enterlevel(ls);
     switch(ls.t.token) {
         case 59 /* (';').charCodeAt(0) */: {  /* stat -> ';' (empty statement) */
@@ -1638,8 +1637,8 @@ const statement = function(ls) {
 ** upvalue named LUA_ENV
 */
 const mainfunc = function(ls, fs) {
-    let bl = new BlockCnt();
-    let v = new expdesc();
+    const bl = new BlockCnt();
+    const v = new expdesc();
     open_func(ls, fs, bl);
     fs.f.is_vararg = true;  /* main function is always declared vararg */
     init_exp(v, expkind.VLOCAL, 0);  /* create and... */
@@ -1651,9 +1650,9 @@ const mainfunc = function(ls, fs) {
 };
 
 const luaY_parser = function(L, z, buff, dyd, name, firstchar) {
-    let lexstate = new llex.LexState();
-    let funcstate = new FuncState();
-    let cl = lfunc.luaF_newLclosure(L, 1);  /* create main closure */
+    const lexstate = new llex.LexState();
+    const funcstate = new FuncState();
+    const cl = lfunc.luaF_newLclosure(L, 1);  /* create main closure */
     ldo.luaD_inctop(L);
     L.stack[L.top-1].setclLvalue(cl);
     lexstate.h = ltable.luaH_new(L);  /* create table for scanner */

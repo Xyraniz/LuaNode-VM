@@ -92,6 +92,7 @@ class global_State {
         this.gc = {
             tables: new Set(),
             userdatas: new Set(),
+            memoryBytes: 0,
             allocationsSinceCollection: 0,
             instructionsSinceCollection: 0,
             baselineObjectCount: 0,
@@ -106,7 +107,7 @@ class global_State {
 }
 
 const luaE_extendCI = function(L) {
-    let ci = new CallInfo();
+    const ci = new CallInfo();
     L.ci.next = ci;
     ci.previous = L.ci;
     ci.next = null;
@@ -115,16 +116,16 @@ const luaE_extendCI = function(L) {
 };
 
 const luaE_freeCI = function(L) {
-    let ci = L.ci;
+    const ci = L.ci;
     ci.next = null;
 };
 
-const stack_init = function(L1, L) {
+const stack_init = function(L1, _L) {
     L1.stack = new Array(BASIC_STACK_SIZE);
     L1.top = 0;
     L1.stack_last = BASIC_STACK_SIZE - EXTRA_STACK;
     /* initialize first ci */
-    let ci = L1.base_ci;
+    const ci = L1.base_ci;
     ci.next = ci.previous = null;
     ci.callstatus = 0;
     ci.funcOff = L1.top;
@@ -144,7 +145,7 @@ const freestack = function(L) {
 ** Create registry table and its predefined values
 */
 const init_registry = function(L, g) {
-    let registry = ltable.luaH_new(L);
+    const registry = ltable.luaH_new(L);
     g.l_registry.sethvalue(registry);
     ltable.luaH_setint(registry, LUA_RIDX_MAINTHREAD, new lobject.TValue(LUA_TTHREAD, L));
     ltable.luaH_setint(registry, LUA_RIDX_GLOBALS, new lobject.TValue(LUA_TTABLE, ltable.luaH_new(L)));
@@ -155,7 +156,7 @@ const init_registry = function(L, g) {
 ** ('g->version' !== NULL flags that the state was completely build)
 */
 const f_luaopen = function(L) {
-    let g = L.l_G;
+    const g = L.l_G;
     stack_init(L, L);
     init_registry(L, g);
     ltm.luaT_init(L);
@@ -163,8 +164,8 @@ const f_luaopen = function(L) {
 };
 
 const lua_newthread = function(L) {
-    let g = L.l_G;
-    let L1 = new lua_State(g);
+    const g = L.l_G;
+    const L1 = new lua_State(g);
     L.stack[L.top] = new lobject.TValue(LUA_TTHREAD, L1);
     lapi.api_incr_top(L);
     L1.hookmask = L.hookmask;
@@ -180,7 +181,7 @@ const luaE_freethread = function(L, L1) {
 };
 
 const lua_newstate = function() {
-    let g = new global_State();
+    const g = new global_State();
     let L = new lua_State(g);
     g.mainthread = L;
 

@@ -11,7 +11,7 @@ const minimalLibs = new Set(["_G", "coroutine", "math", "string", "table", "utf8
 const luaL_openlibs = function(L, options) {
     const hostAccess = !options || options.hostAccess !== false;
     /* "require" functions from 'loadedlibs' and set results to global table */
-    for (let lib in loadedlibs) {
+    for (const lib in loadedlibs) {
         if (!hostAccess && !minimalLibs.has(lib)) continue;
         luaL_requiref(L, to_luastring(lib), loadedlibs[lib], 1);
         lua_pop(L, 1); /* remove lib */

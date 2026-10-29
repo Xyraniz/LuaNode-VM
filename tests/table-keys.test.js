@@ -6,7 +6,7 @@
 ** table.move and length operations work with large integers.
 */
 
-const { evalStr, runLua } = require("./lua-helpers");
+const { runLua } = require("./lua-helpers");
 
 describe("Tables with large integer keys", () => {
     test("Store and retrieve a key above 2^53", () => {

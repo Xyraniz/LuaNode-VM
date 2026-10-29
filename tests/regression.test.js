@@ -6,7 +6,7 @@
 ** strings, coroutines, closures, metatables, math, control flow.
 */
 
-const { evalStr, runLua, runLuaError } = require("./lua-helpers");
+const { evalStr, runLua } = require("./lua-helpers");
 
 describe("String library", () => {
     test("string.sub", () => {

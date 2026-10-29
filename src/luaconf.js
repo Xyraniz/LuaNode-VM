@@ -192,15 +192,15 @@ const lua_number2str = function(n) {
     if (Number.isNaN(n)) return "nan";
     if (n === 0) return Object.is(n, -0) ? "-0" : "0";
 
-    let neg = n < 0;
-    let abs = Math.abs(n);
-    let exp = Math.floor(Math.log10(abs));
-    let precision = 14;
+    const neg = n < 0;
+    const abs = Math.abs(n);
+    const exp = Math.floor(Math.log10(abs));
+    const precision = 14;
 
     /* %.14g: use scientific if exp < -4 or exp >= precision */
     if (exp < -4 || exp >= precision) {
         /* Scientific notation: d.dddddddddddddde[+-]dd (14 sig digits total) */
-        let mantissa = abs / Math.pow(10, exp);
+        const mantissa = abs / Math.pow(10, exp);
         let mantStr = mantissa.toPrecision(precision);
         mantStr = stripTrailingZeros(mantStr);
         let expStr;
@@ -230,7 +230,7 @@ const stripTrailingZeros = function(s) {
 ** the strict (mode 0) rounding mode.
 */
 const lua_numbertointeger = function(n) {
-    let r = fromFloat(n, 0);
+    const r = fromFloat(n, 0);
     return r === null ? false : r;
 };
 

@@ -56,14 +56,12 @@ const {
 const ltable  = require('./ltable.js');
 const {
     LUA_COMPAT_FLOATSTRING,
-    LUA_MAXINTEGER,
     ldexp,
     lua_integer2str,
     lua_number2str
 } = require('../luaconf.js');
 const lvm     = require('./lvm.js');
 const {
-    MAX_INT,
     luai_nummod,
     lua_assert
 } = require("./llimits.js");
@@ -181,7 +179,7 @@ class TValue {
     }
 
     chgfltvalue(x) {
-        lua_assert(this.type == LUA_TNUMFLT);
+        lua_assert(this.type === LUA_TNUMFLT);
         this.value = x;
     }
 
@@ -191,7 +189,7 @@ class TValue {
     }
 
     chgivalue(x) {
-        lua_assert(this.type == LUA_TNUMINT);
+        lua_assert(this.type === LUA_TNUMINT);
         this.value = x;
     }
 
@@ -332,7 +330,9 @@ class Udata {
         this.finalized = false;
         this.len = size;
         this.data = Object.create(null); // ignores size argument
-        L.l_G.gc.userdatas.add(this);
+        const gc = L.l_G.gc;
+        gc.userdatas.add(this);
+        gc.memoryBytes += 80;
     }
 
 }
@@ -376,7 +376,7 @@ const luaO_chunkid = function(source, bufflen) {
         }
     } else {  /* string; format as [string "source"] */
         out = new Uint8Array(bufflen);
-        let nli = luastring_indexOf(source, 10 /* ('\n').charCodeAt(0) */);  /* find first new line (if any) */
+        const nli = luastring_indexOf(source, 10 /* ('\n').charCodeAt(0) */);  /* find first new line (if any) */
         out.set(PRE);  /* add prefix */
         let out_i = PRE.length;
         bufflen -= PRE.length + RETS.length + POS.length;  /* save space for prefix+suffix */
@@ -483,20 +483,20 @@ const lua_strx2number = function(s) {
 const lua_str2number = function(s) {
     try {
         s = to_jsstring(s);
-    } catch (e) {
+    } catch {
         return null;
     }
     /* use a regex to validate number and also to get length
        parseFloat ignores trailing junk */
-    let r = /^[\t\v\f \n\r]*[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]*)(?:[eE][+-]?[0-9]+)?/.exec(s);
+    const r = /^[\t\v\f \n\r]*[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]*)(?:[eE][+-]?[0-9]+)?/.exec(s);
     if (!r)
         return null;
-    let flt = parseFloat(r[0]);
+    const flt = parseFloat(r[0]);
     return !isNaN(flt) ? { n: flt, i: r[0].length } : null;
 };
 
 const l_str2dloc = function(s, mode) {
-    let result = mode === 'x' ? lua_strx2number(s) : lua_str2number(s); /* try to convert */
+    const result = mode === 'x' ? lua_strx2number(s) : lua_str2number(s); /* try to convert */
     if (result === null) return null;
     while (lisspace(s[result.i])) result.i++;  /* skip trailing spaces */
     return (result.i === s.length || s[result.i] === 0) ? result : null;  /* OK if no trailing characters */
@@ -517,19 +517,19 @@ const modes = {
     [ 78]: "n"
 };
 const l_str2d = function(s) {
-    let l = s.length;
+    const l = s.length;
     let pmode = 0;
     for (let i=0; i<l; i++) {
-        let v = s[i];
+        const v = s[i];
         if (SIGILS.indexOf(v) !== -1) {
             pmode = v;
             break;
         }
     }
-    let mode = modes[pmode];
+    const mode = modes[pmode];
     if (mode === 'n')  /* reject 'inf' and 'nan' */
         return null;
-    let end = l_str2dloc(s, mode);  /* try to convert */
+    const end = l_str2dloc(s, mode);  /* try to convert */
     // if (end === null) {   /* failed? may be a different locale */
     //     throw new Error("Locale not available to handle number"); // TODO
     // }
@@ -640,7 +640,7 @@ const luaO_pushvfstring = function(L, fmt, argp) {
     let e;
     for (;;) {
         e = luastring_indexOf(fmt, 37 /* ('%').charCodeAt(0) */, i);
-        if (e == -1) break;
+        if (e === -1) break;
         pushstr(L, fmt.subarray(i, e));
         switch(fmt[e+1]) {
             case 115 /* ('s').charCodeAt(0) */: {
@@ -649,7 +649,7 @@ const luaO_pushvfstring = function(L, fmt, argp) {
                 else {
                     s = from_userstring(s);
                     /* respect null terminator */
-                    let i = luastring_indexOf(s, 0);
+                    const i = luastring_indexOf(s, 0);
                     if (i !== -1)
                         s = s.subarray(0, i);
                 }
@@ -657,7 +657,7 @@ const luaO_pushvfstring = function(L, fmt, argp) {
                 break;
             }
             case 99 /* ('c').charCodeAt(0) */: {
-                let buff = argp[a++];
+                const buff = argp[a++];
                 if (lisprint(buff))
                     pushstr(L, luastring_of(buff));
                 else
@@ -676,7 +676,7 @@ const luaO_pushvfstring = function(L, fmt, argp) {
                 luaO_tostring(L, L.stack[L.top-1]);
                 break;
             case 112 /* ('p').charCodeAt(0) */: {
-                let v = argp[a++];
+                const v = argp[a++];
                 if (v instanceof lstate.lua_State ||
                     v instanceof ltable.Table ||
                     v instanceof Udata ||
@@ -720,8 +720,8 @@ const luaO_pushvfstring = function(L, fmt, argp) {
                 break;
             }
             case 85 /* ('U').charCodeAt(0) */: {
-                let buff = new Uint8Array(UTF8BUFFSZ);
-                let l = luaO_utf8esc(buff, argp[a++]);
+                const buff = new Uint8Array(UTF8BUFFSZ);
+                const l = luaO_utf8esc(buff, argp[a++]);
                 pushstr(L, buff.subarray(UTF8BUFFSZ - l));
                 break;
             }
@@ -775,13 +775,13 @@ const intarith = function(L, op, v1, v2) {
         case LUA_OPSUB:  return I64.sub(v1, v2);
         case LUA_OPMUL:  return I64.mul(v1, v2);
         case LUA_OPMOD: {
-            let r = I64.imod(v1, v2);
+            const r = I64.imod(v1, v2);
             if (r === "divzero")
                 ldebug.luaG_runerror(L, to_luastring("attempt to perform 'n%%0'"));
             return r;
         }
         case LUA_OPIDIV: {
-            let r = I64.idiv(v1, v2);
+            const r = I64.idiv(v1, v2);
             if (r === "divzero")
                 ldebug.luaG_runerror(L, to_luastring("attempt to divide by zero"));
             else if (r === "overflow")
@@ -815,7 +815,7 @@ const numarith = function(L, op, v1, v2) {
 };
 
 const luaO_arith = function(L, op, p1, p2, p3) {
-    let res = (typeof p3 === "number") ? L.stack[p3] : p3;  /* FIXME */
+    const res = (typeof p3 === "number") ? L.stack[p3] : p3;  /* FIXME */
 
     switch (op) {
         case LUA_OPBAND: case LUA_OPBOR: case LUA_OPBXOR:

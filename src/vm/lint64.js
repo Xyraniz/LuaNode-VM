@@ -182,7 +182,7 @@ const neg = function(a) {
 ** returns MIN_INT64, avoiding the unrepresentable positive quotient.
 */
 const idiv = function(a, b) {
-    let ba = toBigInt(a), bb = toBigInt(b);
+    const ba = toBigInt(a), bb = toBigInt(b);
     if (bb === 0n) return "divzero";
     if (ba === MIN_INT64 && bb === -1n) return MIN_INT64;
     /* BigInt division truncates toward zero; Lua wants floor. */
@@ -192,7 +192,7 @@ const idiv = function(a, b) {
 };
 
 const imod = function(a, b) {
-    let ba = toBigInt(a), bb = toBigInt(b);
+    const ba = toBigInt(a), bb = toBigInt(b);
     if (bb === 0n) return "divzero";
     /* MIN % -1 == 0 in Lua (no overflow). */
     if (ba === MIN_INT64 && bb === -1n) return 0;
@@ -222,14 +222,14 @@ const bnot = function(a)    { return wrap(BigInt.asIntN(64, ~toU64(a))); };
 ** Shifts by >= 64 yield 0. The result is re-interpreted as signed int64.
 */
 const shiftl = function(x, y) {
-    let sy = toBigInt(y);
+    const sy = toBigInt(y);
     if (sy < 0n) return shiftr(x, -sy);
     if (sy >= 64n) return 0;
     return wrap(BigInt.asIntN(64, toU64(x) << sy));
 };
 
 const shiftr = function(x, y) {
-    let sy = toBigInt(y);
+    const sy = toBigInt(y);
     if (sy < 0n) return shiftl(x, -sy);
     if (sy >= 64n) return 0;
     /* logical (unsigned) right shift */
@@ -313,7 +313,7 @@ const fromFloat = function(n, mode) {
     if (f >= MIN_SAFE && f <= MAX_SAFE) return f;
     if (f < -9.223372036854776e18 || f > 9.2233720368547755e18) return null;
     /* Outside safe range but within int64: go via BigInt for exactness. */
-    let b = BigInt(f.toFixed(0));
+    const b = BigInt(f.toFixed(0));
     if (b < MIN_INT64 || b > MAX_INT64) return null;
     return shrink(b);
 };
@@ -342,10 +342,10 @@ const toDecimalString = function(v) {
 */
 const fromDecimalString = function(s) {
     try {
-        let b = BigInt(s);
+        const b = BigInt(s);
         if (b < MIN_INT64 || b > MAX_INT64) return null;
         return shrink(b);
-    } catch (e) {
+    } catch {
         return null;
     }
 };
@@ -360,7 +360,7 @@ const fromHexString = function(s, neg) {
         if (neg) b = -b;
         if (b < MIN_INT64 || b > MAX_INT64) return null;
         return shrink(b);
-    } catch (e) {
+    } catch {
         return null;
     }
 };
@@ -371,9 +371,9 @@ const fromHexString = function(s, neg) {
 ** Used by ldump.js. Works for the full int64 range because we go via BigInt.
 */
 const toBytesLE = function(v) {
-    let u = toU64(v);          /* unsigned 64-bit view */
-    let ab = new ArrayBuffer(8);
-    let dv = new DataView(ab);
+    const u = toU64(v);          /* unsigned 64-bit view */
+    const ab = new ArrayBuffer(8);
+    const dv = new DataView(ab);
     dv.setUint32(0, Number(u & 0xFFFFFFFFn), true);
     dv.setUint32(4, Number(u >> 32n), true);
     return new Uint8Array(ab);
@@ -384,10 +384,10 @@ const toBytesLE = function(v) {
 ** int64). Used by lundump.js.
 */
 const fromBytesLE = function(bytes) {
-    let dv = new DataView(bytes.buffer, bytes.byteOffset, 8);
-    let lo = BigInt(dv.getUint32(0, true));
-    let hi = BigInt(dv.getUint32(4, true));
-    let u = (hi << 32n) | lo;
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, 8);
+    const lo = BigInt(dv.getUint32(0, true));
+    const hi = BigInt(dv.getUint32(4, true));
+    const u = (hi << 32n) | lo;
     return wrap(BigInt.asIntN(64, u));
 };
 

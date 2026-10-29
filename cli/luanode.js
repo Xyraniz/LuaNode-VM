@@ -59,7 +59,8 @@ function runString(code, chunkName) {
     }
     lualib.luaL_openlibs(L);
 
-    const status = lauxlib.luaL_loadbuffer(L, to_luastring(code), to_luastring(code).length, to_luastring(chunkName));
+    const codeBytes = to_luastring(code);
+    const status = lauxlib.luaL_loadbuffer(L, codeBytes, codeBytes.length, to_luastring(chunkName));
     if (status !== lua.LUA_OK) {
         const msg = safeToJsString(lua.lua_tostring(L, -1));
         process.stderr.write("luanode: " + msg + "\n");

@@ -42,10 +42,10 @@ const DumpByte = function(y, D) {
 };
 
 const DumpInt = function(x, D) {
-    let ab = new ArrayBuffer(4);
-    let dv = new DataView(ab);
+    const ab = new ArrayBuffer(4);
+    const dv = new DataView(ab);
     dv.setInt32(0, x, true);
-    let t = new Uint8Array(ab);
+    const t = new Uint8Array(ab);
     DumpBlock(t, 4, D);
 };
 
@@ -60,10 +60,10 @@ const DumpInteger = function(x, D) {
 };
 
 const DumpNumber = function(x, D) {
-    let ab = new ArrayBuffer(8);
-    let dv = new DataView(ab);
+    const ab = new ArrayBuffer(8);
+    const dv = new DataView(ab);
     dv.setFloat64(0, x, true);
-    let t = new Uint8Array(ab);
+    const t = new Uint8Array(ab);
     DumpBlock(t, 8, D);
 };
 
@@ -71,8 +71,8 @@ const DumpString = function(s, D) {
     if (s === null)
         DumpByte(0, D);
     else {
-        let size = s.tsslen() + 1;
-        let str = s.getstr();
+        const size = s.tsslen() + 1;
+        const str = s.getstr();
         if (size < 0xFF)
             DumpByte(size, D);
         else {
@@ -84,7 +84,7 @@ const DumpString = function(s, D) {
 };
 
 const DumpCode = function(f, D) {
-    let s = f.code.map(e => e.code);
+    const s = f.code.map(e => e.code);
     DumpInt(s.length, D);
 
     for (let i = 0; i < s.length; i++)
@@ -92,10 +92,10 @@ const DumpCode = function(f, D) {
 };
 
 const DumpConstants = function(f, D) {
-    let n = f.k.length;
+    const n = f.k.length;
     DumpInt(n, D);
     for (let i = 0; i < n; i++) {
-        let o = f.k[i];
+        const o = f.k[i];
         DumpByte(o.ttype(), D);
         switch (o.ttype()) {
             case LUA_TNIL:
@@ -118,14 +118,14 @@ const DumpConstants = function(f, D) {
 };
 
 const DumpProtos = function(f, D) {
-    let n = f.p.length;
+    const n = f.p.length;
     DumpInt(n, D);
     for (let i = 0; i < n; i++)
         DumpFunction(f.p[i], f.source, D);
 };
 
 const DumpUpvalues = function(f, D) {
-    let n = f.upvalues.length;
+    const n = f.upvalues.length;
     DumpInt(n, D);
     for (let i = 0; i < n; i++) {
         DumpByte(f.upvalues[i].instack ? 1 : 0, D);
@@ -186,7 +186,7 @@ const DumpHeader = function(D) {
 ** dump Lua function as precompiled chunk
 */
 const luaU_dump = function(L, f, w, data, strip) {
-    let D = new DumpState();
+    const D = new DumpState();
     D.L = L;
     D.writer = w;
     D.data = data;

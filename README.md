@@ -83,7 +83,7 @@ lualib.luaL_openlibs(L, { hostAccess: false });
 
 This omits `io`, `os`, `package`, `debug`, and `fengari`, and removes `dofile` and `loadfile` from the base library. `print` remains available. This option reduces exposed capabilities; it is not a security sandbox and does not impose CPU or memory limits. Use process or OS isolation and resource limits for untrusted scripts.
 
-The Lua-level collector handles table and userdata reachability, weak table entries, and object finalizers. Its `collectgarbage("count")` value estimates managed Lua object storage; it is not a measurement of the complete JavaScript heap. `collectgarbage("step")` runs one synchronous full pass.
+The Lua-level collector handles table and userdata reachability, weak table entries, and object finalizers. Its `collectgarbage("count")` value is an approximate, constant-time estimate of managed Lua object storage; it is not a measurement of the complete JavaScript heap. A zero-sized `collectgarbage("step", 0)` does no work while the collector is stopped; a positive-sized step and explicit `collect` can still run while automatic collection is stopped.
 
 The package scripts provide equivalent shortcuts:
 
@@ -159,7 +159,7 @@ npm test
 Run it serially when reproducing a failure:
 
 ```bash
-npm test -- --runInBand
+npx jest --runInBand
 ```
 
 Run linting and coverage:
@@ -175,7 +175,7 @@ Run the benchmark:
 npm run benchmark
 ```
 
-The checked test suite covers 184 tests across 13 suites. ESLint applies the shared source rules to `cli/` as well as `src/`; the existing codebase still reports warnings, while `npm run lint` exits successfully when there are no errors.
+The checked test suite covers 189 tests across 13 suites. ESLint applies the shared source rules to `cli/` as well as `src/`; `npm run lint` completes without warnings or errors.
 
 ## Compatibility and boundaries
 

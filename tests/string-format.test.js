@@ -7,7 +7,7 @@
 ** its own integer formatter supporting the full int64 range.
 */
 
-const { evalStr } = require("./lua-helpers");
+const { evalStr, runLua } = require("./lua-helpers");
 
 describe("string.format with %d and large integers", () => {
     test("%d with maxinteger", () => {
@@ -156,5 +156,20 @@ describe("string.format with %q (quoted)", () => {
         const r = evalStr("string.format('%q', math.mininteger)");
         expect(r.ok).toBe(true);
         expect(r.value).toBe("0x8000000000000000");
+    });
+});
+
+describe("string.format with byte strings", () => {
+    test("%s precision and width count bytes, including invalid UTF-8", () => {
+        expect(runLua(
+            "local s=string.format('%.1s', '\\195\\169'); return #s, string.byte(s, 1)"
+        ).value).toBe("1\t195");
+        expect(runLua(
+            "local s=string.format('%3s', '\\195\\169'); " +
+            "return #s, string.byte(s, 1), string.byte(s, 2), string.byte(s, 3)"
+        ).value).toBe("3\t32\t195\t169");
+        expect(runLua(
+            "local s=string.format('%.1s', string.char(255)); return #s, string.byte(s, 1)"
+        ).value).toBe("1\t255");
     });
 });

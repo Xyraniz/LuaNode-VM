@@ -85,11 +85,11 @@ let lua_writeline;
 if (typeof process === "undefined") {
     if (typeof TextDecoder === "function") {
         let buff = "";
-        let decoder = new TextDecoder("utf-8");
+        const decoder = new TextDecoder("utf-8");
         lua_writestring = function(s) {
             buff += decoder.decode(s, {stream: true});
         };
-        let empty = new Uint8Array(0);
+        const empty = new Uint8Array(0);
         lua_writeline = function() {
             buff += decoder.decode(empty);
             console.log(buff);
@@ -101,9 +101,9 @@ if (typeof process === "undefined") {
             try {
                 /* If the string is valid utf8, then we can use to_jsstring */
                 s = to_jsstring(s);
-            } catch (e) {
+            } catch {
                 /* otherwise push copy of raw array */
-                let copy = new Uint8Array(s.length);
+                const copy = new Uint8Array(s.length);
                 copy.set(s);
                 s = copy;
             }
@@ -123,13 +123,13 @@ if (typeof process === "undefined") {
     };
 }
 const luaB_print = function(L) {
-    let n = lua_gettop(L); /* number of arguments */
+    const n = lua_gettop(L); /* number of arguments */
     lua_getglobal(L, to_luastring("tostring", true));
     for (let i = 1; i <= n; i++) {
         lua_pushvalue(L, -1);  /* function to be called */
         lua_pushvalue(L, i);  /* value to print */
         lua_call(L, 1, 1);
-        let s = lua_tolstring(L, -1);
+        const s = lua_tolstring(L, -1);
         if (s === null)
             return luaL_error(L, to_luastring("'tostring' must return a string to 'print'"));
         if (i > 1) lua_writestring(to_luastring("\t"));
@@ -163,7 +163,7 @@ const luaB_getmetatable = function(L) {
 };
 
 const luaB_setmetatable = function(L) {
-    let t = lua_type(L, 2);
+    const t = lua_type(L, 2);
     luaL_checktype(L, 1, LUA_TTABLE);
     luaL_argcheck(L, t === LUA_TNIL || t === LUA_TTABLE, 2, "nil or table expected");
     if (luaL_getmetafield(L, 1, to_luastring("__metatable", true)) !== LUA_TNIL)
@@ -181,7 +181,7 @@ const luaB_rawequal = function(L) {
 };
 
 const luaB_rawlen = function(L) {
-    let t = lua_type(L, 1);
+    const t = lua_type(L, 1);
     luaL_argcheck(L, t === LUA_TTABLE || t === LUA_TSTRING, 1, "table or string expected");
     lua_pushinteger(L, lua_rawlen(L, 1));
     return 1;
@@ -214,7 +214,7 @@ const opts = [
     "isrunning"
 ].map((e) => to_luastring(e));
 const luaB_collectgarbage = function(L) {
-    let o = luaL_checkoption(L, 1, "collect", opts);
+    const o = luaL_checkoption(L, 1, "collect", opts);
     /* LuaNode maintains a per-state Lua-level pass for weak references and
        object finalizers. The host collector remains optional and process-wide. */
     switch (o) {
@@ -243,7 +243,11 @@ const luaB_collectgarbage = function(L) {
             lua_pushinteger(L, ltable.luaH_memory(L) % 1024);
             return 1; /* remainder of the estimated Lua object storage */
         case 5:  /* "step"      */
-            luaL_optinteger(L, 2, 0); /* validate the optional step count */
+            const stepSize = luaL_optinteger(L, 2, 0);
+            if (!ltable.luaH_isrunning(L) && stepSize === 0) {
+                lua_pushboolean(L, 0);
+                return 1;
+            }
             const stepError = ltable.luaH_collectgarbage(L);
             if (stepError) {
                 if (stepError.ttisstring())
@@ -269,7 +273,7 @@ const luaB_collectgarbage = function(L) {
 };
 
 const luaB_type = function(L) {
-    let t = lua_type(L, 1);
+    const t = lua_type(L, 1);
     luaL_argcheck(L, t !== LUA_TNONE, 1, "value expected");
     lua_pushstring(L, lua_typename(L, t));
     return 1;
@@ -308,7 +312,7 @@ const luaB_pairs = function(L) {
 ** Traversal function for 'ipairs'
 */
 const ipairsaux = function(L) {
-    let i = luaL_checkinteger(L, 2) + 1;
+    const i = luaL_checkinteger(L, 2) + 1;
     lua_pushinteger(L, i);
     return lua_geti(L, 1, i) === LUA_TNIL ? 1 : 2;
 };
@@ -331,7 +335,7 @@ const luaB_ipairs = function(L) {
 const b_str2int = function(s, base) {
     try {
         s = to_jsstring(s);
-    } catch (e) {
+    } catch {
         return null;
     }
 
@@ -363,16 +367,16 @@ const luaB_tonumber = function(L) {
             lua_settop(L, 1);
             return 1;
         } else {
-            let s = lua_tostring(L, 1);
+            const s = lua_tostring(L, 1);
             if (s !== null && lua_stringtonumber(L, s) === s.length+1)
                 return 1;  /* successful conversion to number */
         }
     } else {
-        let base = luaL_checkinteger(L, 2);
+        const base = luaL_checkinteger(L, 2);
         luaL_checktype(L, 1, LUA_TSTRING);  /* no numbers as strings */
-        let s = lua_tostring(L, 1);
+        const s = lua_tostring(L, 1);
         luaL_argcheck(L, 2 <= base && base <= 36, 2, "base out of range");
-        let n = b_str2int(s, base);
+        const n = b_str2int(s, base);
         if (n !== null) {
             lua_pushinteger(L, n);
             return 1;
@@ -384,7 +388,7 @@ const luaB_tonumber = function(L) {
 };
 
 const luaB_error = function(L) {
-    let level = luaL_optinteger(L, 2, 1);
+    const level = luaL_optinteger(L, 2, 1);
     lua_settop(L, 1);
     if (lua_type(L, 1) === LUA_TSTRING && level > 0) {
         luaL_where(L, level);  /* add extra information */
@@ -407,7 +411,7 @@ const luaB_assert = function(L) {
 };
 
 const luaB_select = function(L) {
-    let n = lua_gettop(L);
+    const n = lua_gettop(L);
     if (lua_type(L, 1) === LUA_TSTRING && lua_tostring(L, 1)[0] === 35 /* '#'.charCodeAt(0) */) {
         lua_pushinteger(L, n - 1);
         return 1;
@@ -440,7 +444,7 @@ const luaB_pcall = function(L) {
     luaL_checkany(L, 1);
     lua_pushboolean(L, 1);  /* first result if no errors */
     lua_insert(L, 1);  /* put it in place */
-    let status = lua_pcallk(L, lua_gettop(L) - 2, LUA_MULTRET, 0, 0, finishpcall);
+    const status = lua_pcallk(L, lua_gettop(L) - 2, LUA_MULTRET, 0, 0, finishpcall);
     return finishpcall(L, status, 0);
 };
 
@@ -450,12 +454,12 @@ const luaB_pcall = function(L) {
 ** 2 to 'finishpcall' to skip the 2 first values when returning results.
 */
 const luaB_xpcall = function(L) {
-    let n = lua_gettop(L);
+    const n = lua_gettop(L);
     luaL_checktype(L, 2, LUA_TFUNCTION);  /* check error function */
     lua_pushboolean(L, 1);  /* first result */
     lua_pushvalue(L, 1);  /* function */
     lua_rotate(L, 3, 2);  /* move them below function's arguments */
-    let status = lua_pcallk(L, n - 2, LUA_MULTRET, 2, 2, finishpcall);
+    const status = lua_pcallk(L, n - 2, LUA_MULTRET, 2, 2, finishpcall);
     return finishpcall(L, status, 2);
 };
 
@@ -487,7 +491,7 @@ const RESERVEDSLOT = 5;
 ** stack top. Instead, it keeps its resulting string in a
 ** reserved slot inside the stack.
 */
-const generic_reader = function(L, ud) {
+const generic_reader = function(L, _ud) {
     luaL_checkstack(L, 2, "too many nested functions");
     lua_pushvalue(L, 1);  /* get function */
     lua_call(L, 0, 1);  /* call it */
@@ -501,15 +505,15 @@ const generic_reader = function(L, ud) {
 };
 
 const luaB_load = function(L) {
-    let s = lua_tostring(L, 1);
-    let mode = luaL_optstring(L, 3, "bt");
-    let env = !lua_isnone(L, 4) ? 4 : 0;  /* 'env' index or 0 if no 'env' */
+    const s = lua_tostring(L, 1);
+    const mode = luaL_optstring(L, 3, "bt");
+    const env = !lua_isnone(L, 4) ? 4 : 0;  /* 'env' index or 0 if no 'env' */
     let status;
     if (s !== null) {  /* loading a string? */
-        let chunkname = luaL_optstring(L, 2, s);
+        const chunkname = luaL_optstring(L, 2, s);
         status = luaL_loadbufferx(L, s, s.length, chunkname, mode);
     } else {  /* loading from a reader function */
-        let chunkname = luaL_optstring(L, 2, "=(load)");
+        const chunkname = luaL_optstring(L, 2, "=(load)");
         luaL_checktype(L, 1, LUA_TFUNCTION);
         lua_settop(L, RESERVEDSLOT);  /* create reserved slot */
         status = lua_load(L, generic_reader, null, chunkname, mode);
@@ -518,19 +522,19 @@ const luaB_load = function(L) {
 };
 
 const luaB_loadfile = function(L) {
-    let fname = luaL_optstring(L, 1, null);
-    let mode = luaL_optstring(L, 2, null);
-    let env = !lua_isnone(L, 3) ? 3 : 0;  /* 'env' index or 0 if no 'env' */
-    let status = luaL_loadfilex(L, fname, mode);
+    const fname = luaL_optstring(L, 1, null);
+    const mode = luaL_optstring(L, 2, null);
+    const env = !lua_isnone(L, 3) ? 3 : 0;  /* 'env' index or 0 if no 'env' */
+    const status = luaL_loadfilex(L, fname, mode);
     return load_aux(L, status, env);
 };
 
-const dofilecont = function(L, d1, d2) {
+const dofilecont = function(L, _d1, _d2) {
     return lua_gettop(L) - 1;
 };
 
 const luaB_dofile = function(L) {
-    let fname = luaL_optstring(L, 1, null);
+    const fname = luaL_optstring(L, 1, null);
     lua_settop(L, 1);
     if (luaL_loadfile(L, fname) !== LUA_OK)
         return lua_error(L);

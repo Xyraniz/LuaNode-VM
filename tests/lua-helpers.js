@@ -110,7 +110,7 @@ function safeToJsString(ls) {
     if (!ls) return "?";
     try {
         return to_jsstring(ls);
-    } catch (e) {
+    } catch {
         return "?";
     }
 }
